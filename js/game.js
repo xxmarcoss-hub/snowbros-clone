@@ -43,6 +43,15 @@ const Game = {
     titleTransition: false,
     titleTransitionTimer: 0,
 
+    // Transizioni livello
+    stageIntroTimer: 0,
+    stageIntroPhase: 'fade_in', // 'fade_in', 'display', 'fade_out'
+    levelCompleteTimer: 0,
+    levelCompletePhase: 'show', // 'show', 'counting', 'done'
+    timeBonusRemaining: 0,
+    timeBonusCountTimer: 0,
+    victoryTimer: 0,
+
     /**
      * Inizializza il gioco
      */
@@ -115,6 +124,9 @@ const Game = {
             case GameState.MENU:
                 this.updateMenu();
                 break;
+            case GameState.STAGE_INTRO:
+                this.updateStageIntro();
+                break;
             case GameState.PLAYING:
                 this.updatePlaying();
                 break;
@@ -144,6 +156,9 @@ const Game = {
         switch (this.state) {
             case GameState.MENU:
                 this.renderMenu();
+                break;
+            case GameState.STAGE_INTRO:
+                this.renderStageIntro();
                 break;
             case GameState.PLAYING:
             case GameState.PAUSED:
@@ -369,19 +384,126 @@ const Game = {
     },
 
     // ===========================================
+    // STAGE INTRO
+    // ===========================================
+
+    updateStageIntro() {
+        this.stageIntroTimer -= this.deltaTime * FRAME_TIME;
+
+        // Gestione fasi della transizione
+        const elapsed = STAGE_INTRO_DURATION - this.stageIntroTimer;
+
+        if (elapsed < FADE_DURATION) {
+            this.stageIntroPhase = 'fade_in';
+        } else if (this.stageIntroTimer > FADE_DURATION) {
+            this.stageIntroPhase = 'display';
+        } else {
+            this.stageIntroPhase = 'fade_out';
+        }
+
+        // Fine intro, carica livello e inizia gameplay
+        if (this.stageIntroTimer <= 0) {
+            this.loadLevel(this.currentLevel);
+            this.state = GameState.PLAYING;
+            Audio.startMusic();
+        }
+    },
+
+    renderStageIntro() {
+        const ctx = this.ctx;
+        const elapsed = STAGE_INTRO_DURATION - this.stageIntroTimer;
+
+        // Sfondo nero
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // Calcola alpha per fade
+        let contentAlpha = 1;
+        if (this.stageIntroPhase === 'fade_in') {
+            contentAlpha = elapsed / FADE_DURATION;
+        } else if (this.stageIntroPhase === 'fade_out') {
+            contentAlpha = this.stageIntroTimer / FADE_DURATION;
+        }
+
+        ctx.globalAlpha = contentAlpha;
+
+        // Testo "STAGE X"
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+
+        // Effetto pulsante
+        const pulse = 1 + Math.sin(elapsed / 100) * 0.05;
+        ctx.save();
+        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 20);
+        ctx.scale(pulse, pulse);
+        ctx.fillText('STAGE ' + this.currentLevel, 0, 0);
+        ctx.restore();
+
+        // Sottotitolo decorativo
+        ctx.font = '8px monospace';
+        ctx.fillStyle = '#888';
+
+        // Nome livello (opzionale, diverso per ogni stage)
+        const stageNames = [
+            'Snow Valley',
+            'Ice Cave',
+            'Frozen Lake',
+            'Crystal Peaks',
+            'Blizzard Pass',
+            'Glacier Gorge',
+            'Frost Tower',
+            'Arctic Base',
+            'Snowstorm Summit',
+            'Twin Ghouls Lair'
+        ];
+        const stageName = stageNames[this.currentLevel - 1] || '';
+        ctx.fillText(stageName, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 10);
+
+        // Icona giocatore(i)
+        const nickSprite = Sprites.get('nick_idle');
+        const tomSprite = Sprites.get('tom_idle');
+        if (nickSprite) {
+            ctx.drawImage(nickSprite, CANVAS_WIDTH / 2 - (this.numPlayers === 2 ? 25 : 8), CANVAS_HEIGHT / 2 + 30);
+        }
+        if (this.numPlayers === 2 && tomSprite) {
+            ctx.drawImage(tomSprite, CANVAS_WIDTH / 2 + 9, CANVAS_HEIGHT / 2 + 30);
+        }
+
+        // Testo "GET READY!"
+        const readyBlink = Math.floor(elapsed / 200) % 2 === 0;
+        if (this.stageIntroPhase === 'display' && readyBlink) {
+            ctx.fillStyle = '#ffff4a';
+            ctx.font = '10px monospace';
+            ctx.fillText('GET READY!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 70);
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.textAlign = 'left';
+    },
+
+    // ===========================================
     // PLAYING
     // ===========================================
 
     startGame() {
-        this.state = GameState.PLAYING;
         this.currentLevel = 1;
         this.scores = [0, 0];
 
-        this.loadLevel(this.currentLevel);
+        // Inizia con stage intro invece che gameplay diretto
+        this.startStageIntro();
 
-        // Avvia musica dopo la fanfara di start (audio start già suonato nella transizione)
-        setTimeout(() => Audio.startMusic(), 400);
         Debug.log('Game started with', this.numPlayers, 'player(s)');
+    },
+
+    /**
+     * Avvia la schermata di introduzione livello
+     */
+    startStageIntro() {
+        this.state = GameState.STAGE_INTRO;
+        this.stageIntroTimer = STAGE_INTRO_DURATION;
+        this.stageIntroPhase = 'fade_in';
+        Audio.stopMusic();
     },
 
     loadLevel(levelNum) {
@@ -594,6 +716,15 @@ const Game = {
 
     levelComplete() {
         this.state = GameState.LEVEL_COMPLETE;
+        this.levelCompleteTimer = 0;
+        this.levelCompletePhase = 'show';
+
+        // Calcola bonus tempo (secondi rimanenti * punti)
+        const timeSeconds = Math.max(0, Math.ceil(this.levelTime / 1000));
+        this.timeBonusRemaining = timeSeconds * TIME_BONUS_PER_SECOND;
+        this.timeBonusCountTimer = 0;
+
+        Audio.stopMusic();
         Audio.play('levelComplete');
     },
 
@@ -603,14 +734,12 @@ const Game = {
         if (this.currentLevel > 10) {
             // Boss fight o vittoria
             if (this.currentLevel === 11) {
-                // TODO: Boss fight
-                this.state = GameState.VICTORY;
-                Audio.stopMusic();
-                Audio.play('victory');
+                // Avvia schermata vittoria
+                this.startVictoryScreen();
             }
         } else {
-            this.loadLevel(this.currentLevel);
-            this.state = GameState.PLAYING;
+            // Mostra stage intro per il prossimo livello
+            this.startStageIntro();
         }
     },
 
@@ -818,24 +947,100 @@ const Game = {
     // ===========================================
 
     updateLevelComplete() {
-        if (Input.getMenu().confirm) {
-            this.nextLevel();
+        this.levelCompleteTimer += this.deltaTime * FRAME_TIME;
+
+        // Fase iniziale: mostra "STAGE CLEAR" per 1.5 secondi
+        if (this.levelCompletePhase === 'show' && this.levelCompleteTimer > 1500) {
+            this.levelCompletePhase = 'counting';
+            this.timeBonusCountTimer = 0;
+        }
+
+        // Fase conteggio: aggiungi bonus punti progressivamente
+        if (this.levelCompletePhase === 'counting') {
+            this.timeBonusCountTimer += this.deltaTime * FRAME_TIME;
+
+            if (this.timeBonusCountTimer >= TIME_BONUS_COUNT_SPEED && this.timeBonusRemaining > 0) {
+                this.timeBonusCountTimer = 0;
+
+                // Aggiungi punti (100 alla volta)
+                const pointsToAdd = Math.min(TIME_BONUS_PER_SECOND, this.timeBonusRemaining);
+                this.timeBonusRemaining -= pointsToAdd;
+
+                // Distribuisci punti a tutti i player vivi
+                this.players.forEach(player => {
+                    if (player.alive || player.lives > 0) {
+                        this.addScore(player.playerNum, Math.floor(pointsToAdd / this.players.length));
+                    }
+                });
+
+                Audio.play('point');
+            }
+
+            // Fine conteggio
+            if (this.timeBonusRemaining <= 0) {
+                this.levelCompletePhase = 'done';
+                Audio.play('bonus');
+            }
+        }
+
+        // Fase done: attendi conferma o auto-avanza dopo 2 secondi
+        if (this.levelCompletePhase === 'done') {
+            if (Input.getMenu().confirm || this.levelCompleteTimer > 6000) {
+                this.nextLevel();
+            }
         }
     },
 
     renderLevelComplete() {
         const ctx = this.ctx;
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        // Overlay semi-trasparente
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('STAGE ' + this.currentLevel + ' CLEAR!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
 
+        // Titolo "STAGE X CLEAR!"
+        const titlePulse = 1 + Math.sin(this.levelCompleteTimer / 150) * 0.05;
+        ctx.save();
+        ctx.translate(CANVAS_WIDTH / 2, 70);
+        ctx.scale(titlePulse, titlePulse);
+        ctx.fillStyle = '#4aff4a';
+        ctx.font = '14px monospace';
+        ctx.fillText('STAGE ' + this.currentLevel + ' CLEAR!', 0, 0);
+        ctx.restore();
+
+        // Mostra conteggio bonus tempo
+        if (this.levelCompletePhase !== 'show') {
+            ctx.fillStyle = '#fff';
+            ctx.font = '10px monospace';
+            ctx.fillText('TIME BONUS', CANVAS_WIDTH / 2, 100);
+
+            // Punti bonus rimanenti (che decrescono durante il conteggio)
+            const displayBonus = this.timeBonusRemaining;
+            ctx.fillStyle = '#ffff4a';
+            ctx.font = '12px monospace';
+            ctx.fillText(String(displayBonus).padStart(5, '0'), CANVAS_WIDTH / 2, 118);
+        }
+
+        // Punteggio corrente
+        ctx.fillStyle = '#fff';
         ctx.font = '8px monospace';
-        ctx.fillText('Press ENTER', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 20);
+        ctx.fillText('SCORE: ' + String(this.scores[0]).padStart(6, '0'), CANVAS_WIDTH / 2, 145);
+
+        if (this.numPlayers === 2) {
+            ctx.fillText('P2: ' + String(this.scores[1]).padStart(6, '0'), CANVAS_WIDTH / 2, 158);
+        }
+
+        // Messaggio continua
+        if (this.levelCompletePhase === 'done') {
+            const blink = Math.floor(this.levelCompleteTimer / 300) % 2 === 0;
+            if (blink) {
+                ctx.fillStyle = '#888';
+                ctx.font = '8px monospace';
+                ctx.fillText('Press ENTER to continue', CANVAS_WIDTH / 2, 190);
+            }
+        }
 
         ctx.textAlign = 'left';
     },
@@ -921,8 +1126,18 @@ const Game = {
     // VICTORY
     // ===========================================
 
+    startVictoryScreen() {
+        this.state = GameState.VICTORY;
+        this.victoryTimer = 0;
+        Audio.stopMusic();
+        Audio.play('victory');
+    },
+
     updateVictory() {
-        if (Input.getMenu().confirm) {
+        this.victoryTimer += this.deltaTime * FRAME_TIME;
+
+        // Attendi conferma dopo 3 secondi
+        if (this.victoryTimer > 3000 && Input.getMenu().confirm) {
             this.state = GameState.MENU;
             this.initTitleSnowflakes();
         }
@@ -931,27 +1146,95 @@ const Game = {
     renderVictory() {
         const ctx = this.ctx;
 
-        ctx.fillStyle = '#001';
+        // Sfondo sfumato celebrativo
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, '#001030');
+        gradient.addColorStop(0.5, '#002060');
+        gradient.addColorStop(1, '#001030');
+        ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        ctx.fillStyle = '#0f0';
-        ctx.font = '14px monospace';
+        // Stelle decorative animate
+        const numStars = 15;
+        for (let i = 0; i < numStars; i++) {
+            const starX = (i * 37 + this.victoryTimer / 50) % CANVAS_WIDTH;
+            const starY = ((i * 23) % CANVAS_HEIGHT);
+            const twinkle = Math.sin(this.victoryTimer / 200 + i) * 0.5 + 0.5;
+            ctx.fillStyle = `rgba(255, 255, 200, ${twinkle * 0.8})`;
+            ctx.beginPath();
+            ctx.arc(starX, starY, 1 + twinkle, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         ctx.textAlign = 'center';
-        ctx.fillText('CONGRATULATIONS!', CANVAS_WIDTH / 2, 80);
+
+        // Titolo "CONGRATULATIONS!" con effetto arcobaleno
+        const titleY = 50 + Math.sin(this.victoryTimer / 300) * 5;
+        const hue = (this.victoryTimer / 20) % 360;
+        ctx.fillStyle = `hsl(${hue}, 80%, 60%)`;
+        ctx.font = '14px monospace';
+
+        // Effetto onda sulle lettere
+        const title = 'CONGRATULATIONS!';
+        let xOffset = CANVAS_WIDTH / 2 - (title.length * 4);
+        for (let i = 0; i < title.length; i++) {
+            const letterY = titleY + Math.sin(this.victoryTimer / 150 + i * 0.5) * 3;
+            const letterHue = (hue + i * 20) % 360;
+            ctx.fillStyle = `hsl(${letterHue}, 80%, 60%)`;
+            ctx.textAlign = 'left';
+            ctx.fillText(title[i], xOffset + i * 8, letterY);
+        }
+
+        ctx.textAlign = 'center';
+
+        // Messaggio vittoria
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px monospace';
+        ctx.fillText('You defeated the Twin Ghouls!', CANVAS_WIDTH / 2, 80);
+        ctx.fillText('The kingdom is saved!', CANVAS_WIDTH / 2, 95);
+
+        // Personaggi celebrativi
+        const nickSprite = Sprites.get('nick_idle');
+        const tomSprite = Sprites.get('tom_idle');
+        const charBob = Math.sin(this.victoryTimer / 200) * 3;
+
+        if (nickSprite) {
+            ctx.drawImage(nickSprite, CANVAS_WIDTH / 2 - (this.numPlayers === 2 ? 30 : 8), 110 + charBob);
+        }
+        if (this.numPlayers === 2 && tomSprite) {
+            ctx.drawImage(tomSprite, CANVAS_WIDTH / 2 + 14, 110 - charBob);
+        }
+
+        // Punteggio finale con bordo
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(CANVAS_WIDTH / 2 - 60, 138, 120, this.numPlayers === 2 ? 40 : 25);
+
+        ctx.fillStyle = '#ffff4a';
+        ctx.font = '8px monospace';
+        ctx.fillText('FINAL SCORE', CANVAS_WIDTH / 2, 150);
 
         ctx.fillStyle = '#fff';
         ctx.font = '10px monospace';
-        ctx.fillText('You saved the princess!', CANVAS_WIDTH / 2, 110);
+        ctx.fillText('P1: ' + String(this.scores[0]).padStart(6, '0'), CANVAS_WIDTH / 2, 163);
 
-        ctx.font = '8px monospace';
-        ctx.fillText('Final Score:', CANVAS_WIDTH / 2, 140);
-        ctx.fillText('P1: ' + this.scores[0], CANVAS_WIDTH / 2, 155);
         if (this.numPlayers === 2) {
-            ctx.fillText('P2: ' + this.scores[1], CANVAS_WIDTH / 2, 170);
+            ctx.fillText('P2: ' + String(this.scores[1]).padStart(6, '0'), CANVAS_WIDTH / 2, 176);
         }
 
-        ctx.fillStyle = '#888';
-        ctx.fillText('Press ENTER', CANVAS_WIDTH / 2, 200);
+        // Istruzioni (dopo 3 secondi)
+        if (this.victoryTimer > 3000) {
+            const blink = Math.floor(this.victoryTimer / 400) % 2 === 0;
+            if (blink) {
+                ctx.fillStyle = '#888';
+                ctx.font = '8px monospace';
+                ctx.fillText('Press ENTER to return to menu', CANVAS_WIDTH / 2, 205);
+            }
+        }
+
+        // Credits
+        ctx.fillStyle = '#444';
+        ctx.font = '6px monospace';
+        ctx.fillText('THANK YOU FOR PLAYING!', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 8);
 
         ctx.textAlign = 'left';
     },

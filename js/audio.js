@@ -104,7 +104,13 @@ const Audio = {
             'powerup': () => this.playPowerUpSound(),
             'levelComplete': () => this.playLevelCompleteSound(),
             'gameOver': () => this.playGameOverSound(),
-            'victory': () => this.playVictorySound()
+            'victory': () => this.playVictorySound(),
+
+            // Transizioni e timer
+            'point': () => this.playPointSound(),
+            'bonus': () => this.playBonusSound(),
+            'hurry': () => this.playHurrySound(),
+            'pumpkin': () => this.playPumpkinSound()
         };
 
         if (sounds[name]) {
@@ -366,6 +372,51 @@ const Audio = {
                 this.playTone(freq, 0.2, 'square', 0.35);
             }, i * 150);
         });
+    },
+
+    /**
+     * Suono tick punti (durante conteggio bonus)
+     */
+    playPointSound() {
+        this.playTone(880, 0.03, 'square', 0.15);
+    },
+
+    /**
+     * Suono bonus completato
+     */
+    playBonusSound() {
+        const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
+        notes.forEach((freq, i) => {
+            setTimeout(() => {
+                this.playTone(freq, 0.1, 'square', 0.25);
+            }, i * 50);
+        });
+    },
+
+    /**
+     * Suono avviso tempo - HURRY UP!
+     */
+    playHurrySound() {
+        // Suono di allarme ripetuto
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => {
+                this.playTone(880, 0.15, 'square', 0.4);
+            }, i * 200);
+            setTimeout(() => {
+                this.playTone(660, 0.15, 'square', 0.4);
+            }, i * 200 + 100);
+        }
+    },
+
+    /**
+     * Suono spawn Pumpkin Head
+     */
+    playPumpkinSound() {
+        // Suono minaccioso discendente
+        this.playSweep(600, 100, 0.5, 'sawtooth', 0.4);
+        setTimeout(() => {
+            this.playNoise(0.2, 0.2);
+        }, 200);
     },
 
     // ===========================================
