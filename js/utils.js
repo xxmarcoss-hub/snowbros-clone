@@ -46,9 +46,16 @@ const POWERUP_FALL_SPEED = 1.5;
 const LEVEL_TIME = 90000; // ms (90 secondi)
 const HURRY_TIME = 20000; // ms - avviso quando rimangono 20s
 
+// --- Costanti Transizioni ---
+const STAGE_INTRO_DURATION = 2500; // ms - durata schermata "STAGE X"
+const FADE_DURATION = 500; // ms - durata fade in/out
+const TIME_BONUS_PER_SECOND = 100; // punti per secondo rimanente
+const TIME_BONUS_COUNT_SPEED = 50; // ms tra ogni tick conteggio bonus
+
 // --- Stati di Gioco ---
 const GameState = {
     MENU: 'menu',
+    STAGE_INTRO: 'stage_intro',  // Schermata "STAGE X" prima del livello
     PLAYING: 'playing',
     PAUSED: 'paused',
     LEVEL_COMPLETE: 'level_complete',
