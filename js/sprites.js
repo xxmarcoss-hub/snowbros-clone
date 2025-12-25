@@ -15,6 +15,7 @@ const Sprites = {
         this.generateSnow();
         this.generatePowerUps();
         this.generatePlatforms();
+        this.generatePumpkinHead();
         this.generateEffects();
 
         Debug.log('All sprites generated');
@@ -448,6 +449,67 @@ const Sprites = {
     // ===========================================
     // EFFECT SPRITES
     // ===========================================
+
+    // ===========================================
+    // PUMPKIN HEAD SPRITE
+    // ===========================================
+
+    generatePumpkinHead() {
+        // Palette Pumpkin Head (zucca arancione maligna)
+        const pumpkinPalette = {
+            1: '#ff8c00', // arancione chiaro
+            2: '#cc6600', // arancione scuro
+            3: '#ffff00', // giallo (occhi/bocca luminosi)
+            4: '#000000', // nero (contorno)
+            5: '#00ff00', // verde (gambo)
+            6: '#ffa500'  // arancione medio
+        };
+
+        // Pumpkin Head frame 1 (16x16)
+        const pumpkinFrame1 = [
+            [0,0,0,0,0,0,5,5,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,5,5,5,5,0,0,0,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,1,1,6,1,1,1,1,6,1,1,1,0,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,3,3,1,1,1,1,3,3,1,1,1,0,0],
+            [0,1,1,3,3,1,1,1,1,3,3,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,3,1,3,3,3,3,3,1,3,1,1,0,0],
+            [0,1,1,1,3,1,1,1,1,1,3,1,1,1,0,0],
+            [0,0,1,1,1,3,3,3,3,3,1,1,1,0,0,0],
+            [0,0,0,1,2,1,1,1,1,1,2,1,0,0,0,0],
+            [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
+            [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        ];
+
+        // Pumpkin Head frame 2 (animazione camminata)
+        const pumpkinFrame2 = [
+            [0,0,0,0,0,0,5,5,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,5,5,5,5,0,0,0,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,1,1,6,1,1,1,1,6,1,1,1,0,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,3,3,1,1,1,1,3,3,1,1,1,0,0],
+            [0,1,1,3,3,1,1,1,1,3,3,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,3,1,3,3,3,3,3,1,3,1,1,0,0],
+            [0,1,1,1,3,1,1,1,1,1,3,1,1,1,0,0],
+            [0,0,1,1,1,3,3,3,3,3,1,1,1,0,0,0],
+            [0,0,0,1,2,1,1,1,1,1,2,1,0,0,0,0],
+            [0,0,0,0,2,2,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0]
+        ];
+
+        this.cache['pumpkin_1'] = this.createSprite(16, 16, pumpkinFrame1, pumpkinPalette);
+        this.cache['pumpkin_1_left'] = this.flipHorizontal(this.cache['pumpkin_1']);
+        this.cache['pumpkin_2'] = this.createSprite(16, 16, pumpkinFrame2, pumpkinPalette);
+        this.cache['pumpkin_2_left'] = this.flipHorizontal(this.cache['pumpkin_2']);
+    },
 
     generateEffects() {
         // Particella esplosione (8x8)

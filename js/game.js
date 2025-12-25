@@ -25,6 +25,11 @@ const Game = {
     lastTime: 0,
     deltaTime: 0,
 
+    // Timer livello e Pumpkin Head
+    hurryUpShown: false,
+    hurryUpTimer: 0,
+    pumpkinHead: null,
+
     // Punteggi
     scores: [0, 0],
 
@@ -241,8 +246,11 @@ const Game = {
             this.enemies.push(new Enemy(e.x, e.y, e.type));
         });
 
-        // Reset timer
+        // Reset timer e Pumpkin Head
         this.levelTime = LEVEL_TIME;
+        this.hurryUpShown = false;
+        this.hurryUpTimer = 0;
+        this.pumpkinHead = null;
 
         Debug.log('Level', levelNum, 'loaded');
     },
@@ -258,6 +266,29 @@ const Game = {
 
         // Timer livello
         this.levelTime -= this.deltaTime * FRAME_TIME;
+
+        // Avviso HURRY UP quando mancano HURRY_TIME ms
+        if (this.levelTime <= HURRY_TIME && !this.hurryUpShown) {
+            this.hurryUpShown = true;
+            this.hurryUpTimer = 2000; // Mostra per 2 secondi
+            Audio.play('hurry');
+            Debug.log('HURRY UP!');
+        }
+
+        // Aggiorna timer avviso HURRY UP
+        if (this.hurryUpTimer > 0) {
+            this.hurryUpTimer -= this.deltaTime * FRAME_TIME;
+        }
+
+        // Spawn Pumpkin Head quando il tempo scade
+        if (this.levelTime <= 0 && !this.pumpkinHead) {
+            this.spawnPumpkinHead();
+        }
+
+        // Update Pumpkin Head
+        if (this.pumpkinHead) {
+            this.pumpkinHead.update(this.deltaTime);
+        }
 
         // Update players
         this.players.forEach(player => {
@@ -350,6 +381,18 @@ const Game = {
                 }
             });
         });
+
+        // Player vs Pumpkin Head (invincibile)
+        if (this.pumpkinHead) {
+            this.players.forEach(player => {
+                if (!player.alive || player.invincible) return;
+
+                if (collideAABB(player, this.pumpkinHead)) {
+                    player.hit();
+                    Audio.play('hurt');
+                }
+            });
+        }
     },
 
     pushSnowball(player, frozenEnemy) {
@@ -407,6 +450,11 @@ const Game = {
         // Nemici
         this.enemies.forEach(e => e.render(ctx));
 
+        // Pumpkin Head
+        if (this.pumpkinHead) {
+            this.pumpkinHead.render(ctx);
+        }
+
         // Palle di neve
         this.snowballs.forEach(s => s.render(ctx));
 
@@ -418,6 +466,11 @@ const Game = {
 
         // HUD
         this.renderHUD();
+
+        // Avviso HURRY UP
+        if (this.hurryUpTimer > 0) {
+            this.renderHurryUp();
+        }
     },
 
     renderHUD() {
@@ -452,12 +505,52 @@ const Game = {
             }
         }
 
-        // Livello
+        // Livello e Timer
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fff';
         ctx.fillText('STAGE ' + this.currentLevel, CANVAS_WIDTH / 2, 10);
 
+        // Timer
+        const timeSeconds = Math.max(0, Math.ceil(this.levelTime / 1000));
+        const timerColor = timeSeconds <= 20 ? '#ff4a4a' : (timeSeconds <= 30 ? '#ffff4a' : '#fff');
+        ctx.fillStyle = timerColor;
+        ctx.fillText('TIME: ' + timeSeconds, CANVAS_WIDTH / 2, 20);
+
         ctx.textAlign = 'left';
+    },
+
+    renderHurryUp() {
+        const ctx = this.ctx;
+
+        // Effetto lampeggio
+        const blink = Math.floor(this.hurryUpTimer / 150) % 2 === 0;
+        if (!blink) return;
+
+        // Sfondo semi-trasparente
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        ctx.fillRect(0, CANVAS_HEIGHT / 2 - 20, CANVAS_WIDTH, 40);
+
+        // Testo HURRY UP!
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('HURRY UP!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 5);
+
+        ctx.textAlign = 'left';
+    },
+
+    spawnPumpkinHead() {
+        // Spawna Pumpkin Head dalla parte opposta al player
+        let spawnX = CANVAS_WIDTH / 2;
+
+        if (this.players.length > 0 && this.players[0].alive) {
+            // Spawna dal lato opposto al primo player
+            spawnX = this.players[0].x < CANVAS_WIDTH / 2 ? CANVAS_WIDTH - 20 : 20;
+        }
+
+        this.pumpkinHead = new PumpkinHead(spawnX, 20);
+        Audio.play('pumpkin');
+        Debug.log('Pumpkin Head spawned!');
     },
 
     // ===========================================

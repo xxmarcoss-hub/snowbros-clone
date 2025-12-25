@@ -5,7 +5,8 @@
 // Tipi di nemici
 const EnemyType = {
     RED_DEMON: 'red_demon',
-    BLUE_DEMON: 'blue_demon'
+    BLUE_DEMON: 'blue_demon',
+    PUMPKIN_HEAD: 'pumpkin_head'
 };
 
 // ===========================================
@@ -422,6 +423,213 @@ class Enemy {
 }
 
 // ===========================================
+// CLASSE PUMPKIN HEAD - Nemico invincibile
+// ===========================================
+
+class PumpkinHead {
+    constructor(x, y) {
+        // Posizione e dimensioni
+        this.x = x;
+        this.y = y;
+        this.width = ENEMY_WIDTH;
+        this.height = ENEMY_HEIGHT;
+
+        // Velocità
+        this.vx = 0;
+        this.vy = 0;
+        this.speed = ENEMY_SPEED * 1.5; // Più veloce dei nemici normali
+
+        // Direzione
+        this.facing = 1;
+
+        // Stato
+        this.alive = true;
+        this.grounded = false;
+
+        // Animazione
+        this.animFrame = 0;
+        this.animTimer = 0;
+        this.animSpeed = 150;
+
+        // Effetto lampeggio (per enfatizzare che è speciale)
+        this.blinkTimer = 0;
+    }
+
+    update(dt) {
+        if (!this.alive) return;
+
+        // Insegui il player più vicino
+        this.chasePlayer(dt);
+
+        // Fisica
+        this.applyPhysics(dt);
+
+        // Collisioni con piattaforme
+        this.checkPlatformCollisions();
+
+        // Animazione
+        this.updateAnimation(dt);
+    }
+
+    chasePlayer(dt) {
+        // Trova il player più vicino tra quelli vivi
+        let target = null;
+        let minDist = Infinity;
+
+        for (const player of Game.players) {
+            if (!player.alive) continue;
+
+            const dist = distance(
+                this.x + this.width / 2,
+                this.y + this.height / 2,
+                player.x + player.width / 2,
+                player.y + player.height / 2
+            );
+
+            if (dist < minDist) {
+                minDist = dist;
+                target = player;
+            }
+        }
+
+        if (!target) return;
+
+        // Direzione verso il target
+        const dx = target.x - this.x;
+
+        // Aggiorna facing e velocità
+        if (dx > 5) {
+            this.facing = 1;
+            this.vx = this.speed;
+        } else if (dx < -5) {
+            this.facing = -1;
+            this.vx = -this.speed;
+        } else {
+            this.vx = 0;
+        }
+
+        // Salta se il target è sopra e siamo a terra
+        const dy = target.y - this.y;
+        if (dy < -20 && this.grounded && Math.random() < 0.05) {
+            this.vy = PLAYER_JUMP_FORCE * 0.9;
+            this.grounded = false;
+        }
+    }
+
+    applyPhysics(dt) {
+        // Gravità
+        if (!this.grounded) {
+            this.vy += GRAVITY * dt;
+            this.vy = Math.min(this.vy, MAX_FALL_SPEED);
+        }
+
+        // Aggiorna posizione
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        // Wrap orizzontale (come i player)
+        if (this.x + this.width < 0) {
+            this.x = CANVAS_WIDTH;
+        } else if (this.x > CANVAS_WIDTH) {
+            this.x = -this.width;
+        }
+    }
+
+    checkPlatformCollisions() {
+        this.grounded = false;
+
+        for (const platform of Game.platforms) {
+            if (!platform || !platform.solid) continue;
+
+            const collision = platform.checkCollision(this, this.y - this.vy);
+
+            if (collision) {
+                if (collision.type === 'top') {
+                    this.y = collision.y;
+                    this.vy = 0;
+                    this.grounded = true;
+                }
+            }
+        }
+
+        // Pavimento
+        if (this.y + this.height >= CANVAS_HEIGHT - 8) {
+            this.y = CANVAS_HEIGHT - 8 - this.height;
+            this.vy = 0;
+            this.grounded = true;
+        }
+    }
+
+    updateAnimation(dt) {
+        const frameMs = dt * FRAME_TIME;
+        this.animTimer += frameMs;
+        this.blinkTimer += frameMs;
+
+        if (this.animTimer >= this.animSpeed) {
+            this.animFrame = (this.animFrame + 1) % 2;
+            this.animTimer = 0;
+        }
+    }
+
+    getSpriteName() {
+        const dir = this.facing === -1 ? '_left' : '';
+        const frame = this.animFrame + 1;
+        return `pumpkin_${frame}${dir}`;
+    }
+
+    render(ctx) {
+        if (!this.alive) return;
+
+        // Effetto lampeggio (visibilità pulsante)
+        const blink = Math.sin(this.blinkTimer / 100) > 0;
+
+        const sprite = Sprites.get(this.getSpriteName());
+
+        if (sprite) {
+            // Salva contesto per effetti
+            ctx.save();
+
+            // Effetto glow arancione
+            if (blink) {
+                ctx.shadowColor = '#ff8c00';
+                ctx.shadowBlur = 8;
+            }
+
+            ctx.drawImage(
+                sprite,
+                Math.floor(this.x),
+                Math.floor(this.y),
+                this.width,
+                this.height
+            );
+
+            ctx.restore();
+        } else {
+            // Fallback: rettangolo arancione
+            ctx.fillStyle = blink ? '#ff8c00' : '#cc6600';
+            ctx.fillRect(
+                Math.floor(this.x),
+                Math.floor(this.y),
+                this.width,
+                this.height
+            );
+
+            // Occhi luminosi
+            ctx.fillStyle = '#ffff00';
+            const eyeX = this.facing === 1 ? this.x + 8 : this.x + 4;
+            ctx.fillRect(eyeX, this.y + 5, 2, 2);
+            ctx.fillRect(eyeX + 4, this.y + 5, 2, 2);
+        }
+
+        // Debug hitbox
+        if (Debug.enabled && Debug.showHitboxes) {
+            ctx.strokeStyle = '#ff0';
+            ctx.strokeRect(this.x, this.y, this.width, this.height);
+        }
+    }
+}
+
+// ===========================================
 // FACTORY PER CREAZIONE NEMICI
 // ===========================================
 
@@ -431,7 +639,7 @@ const EnemyFactory = {
     },
 
     createRandom(x, y) {
-        const types = Object.values(EnemyType);
+        const types = [EnemyType.RED_DEMON, EnemyType.BLUE_DEMON];
         const type = randomChoice(types);
         return this.create(x, y, type);
     },
