@@ -660,11 +660,20 @@ const Game = {
         ctx.fillStyle = '#fff';
         ctx.fillText(String(this.scores[0]).padStart(6, '0'), 20, 10);
 
-        // Lives P1
-        for (let i = 0; i < this.players[0]?.lives || 0; i++) {
-            ctx.fillStyle = Colors.NICK_BLUE;
-            ctx.fillRect(4 + i * 8, 14, 6, 6);
+        // Vite P1 (icone)
+        const lifeNick = Sprites.get('life_nick');
+        const player1Lives = this.players[0]?.lives || 0;
+        for (let i = 0; i < player1Lives; i++) {
+            if (lifeNick) {
+                ctx.drawImage(lifeNick, 4 + i * 9, 13);
+            } else {
+                ctx.fillStyle = Colors.NICK_BLUE;
+                ctx.fillRect(4 + i * 9, 14, 7, 7);
+            }
         }
+
+        // Power-up attivi P1
+        this.renderPlayerPowerups(ctx, this.players[0], 4, 22);
 
         // Score P2 (se attivo)
         if (this.numPlayers === 2) {
@@ -674,11 +683,20 @@ const Game = {
             ctx.fillStyle = '#fff';
             ctx.fillText(String(this.scores[1]).padStart(6, '0'), CANVAS_WIDTH - 4, 10);
 
-            // Lives P2
-            for (let i = 0; i < this.players[1]?.lives || 0; i++) {
-                ctx.fillStyle = Colors.TOM_GREEN;
-                ctx.fillRect(CANVAS_WIDTH - 10 - i * 8, 14, 6, 6);
+            // Vite P2 (icone)
+            const lifeTom = Sprites.get('life_tom');
+            const player2Lives = this.players[1]?.lives || 0;
+            for (let i = 0; i < player2Lives; i++) {
+                if (lifeTom) {
+                    ctx.drawImage(lifeTom, CANVAS_WIDTH - 11 - i * 9, 13);
+                } else {
+                    ctx.fillStyle = Colors.TOM_GREEN;
+                    ctx.fillRect(CANVAS_WIDTH - 11 - i * 9, 14, 7, 7);
+                }
             }
+
+            // Power-up attivi P2
+            this.renderPlayerPowerups(ctx, this.players[1], CANVAS_WIDTH - 4, 22, true);
         }
 
         // Livello e Timer
@@ -693,6 +711,40 @@ const Game = {
         ctx.fillText('TIME: ' + timeSeconds, CANVAS_WIDTH / 2, 20);
 
         ctx.textAlign = 'left';
+    },
+
+    /**
+     * Renderizza icone power-up attivi per un player
+     */
+    renderPlayerPowerups(ctx, player, x, y, alignRight = false) {
+        if (!player) return;
+
+        const powerupTypes = [
+            { key: 'speed', sprite: 'hud_speed' },
+            { key: 'range', sprite: 'hud_range' },
+            { key: 'fireRate', sprite: 'hud_fire_rate' },
+            { key: 'fly', sprite: 'hud_fly' }
+        ];
+
+        let offsetX = 0;
+        for (const pu of powerupTypes) {
+            if (player.powerups[pu.key]) {
+                const sprite = Sprites.get(pu.sprite);
+                const drawX = alignRight ? x - 6 - offsetX : x + offsetX;
+
+                if (sprite) {
+                    // Lampeggio quando sta per scadere (ultimi 2 secondi)
+                    const timeLeft = player.powerupTimers[pu.key];
+                    const blink = timeLeft <= 2000 && Math.floor(timeLeft / 150) % 2 === 0;
+
+                    if (!blink) {
+                        ctx.drawImage(sprite, drawX, y);
+                    }
+                }
+
+                offsetX += 8;
+            }
+        }
     },
 
     renderHurryUp() {

@@ -18,6 +18,7 @@ const Sprites = {
         this.generatePumpkinHead();
         this.generateEffects();
         this.generateTitle();
+        this.generateHUD();
 
         Debug.log('All sprites generated');
     },
@@ -670,5 +671,65 @@ const Sprites = {
 
         this.cache['snowflake'] = this.createSprite(8, 8, snowflake, { 1: '#ffffff' });
         this.cache['snowflake_blue'] = this.createSprite(8, 8, snowflake, { 1: '#4a9fff' });
+    },
+
+    // ===========================================
+    // HUD SPRITES
+    // ===========================================
+
+    generateHUD() {
+        // Icona vita Nick (7x7) - faccina pupazzo di neve blu
+        const lifeIconNick = [
+            [0,0,1,1,1,0,0],
+            [0,1,1,1,1,1,0],
+            [1,3,3,1,3,3,1],
+            [1,4,3,1,4,3,1],
+            [1,1,1,5,1,1,1],
+            [0,1,1,1,1,1,0],
+            [0,0,1,1,1,0,0]
+        ];
+
+        // Icona vita Tom (7x7) - faccina pupazzo di neve verde
+        const lifeIconTom = [
+            [0,0,1,1,1,0,0],
+            [0,1,1,1,1,1,0],
+            [1,3,3,1,3,3,1],
+            [1,4,3,1,4,3,1],
+            [1,1,1,5,1,1,1],
+            [0,1,1,1,1,1,0],
+            [0,0,1,1,1,0,0]
+        ];
+
+        const nickPalette = {
+            1: '#4a9fff', // blu
+            3: '#ffffff', // bianco occhi
+            4: '#000000', // pupille
+            5: '#ff9f4a'  // naso arancione
+        };
+
+        const tomPalette = {
+            1: '#4aff4a', // verde
+            3: '#ffffff',
+            4: '#000000',
+            5: '#ff9f4a'
+        };
+
+        this.cache['life_nick'] = this.createSprite(7, 7, lifeIconNick, nickPalette);
+        this.cache['life_tom'] = this.createSprite(7, 7, lifeIconTom, tomPalette);
+
+        // Icone power-up per HUD (6x6) - versione mini
+        const powerupIcon = [
+            [0,0,1,1,0,0],
+            [0,1,2,2,1,0],
+            [0,1,2,2,1,0],
+            [0,1,2,2,1,0],
+            [0,1,2,2,1,0],
+            [0,0,1,1,0,0]
+        ];
+
+        this.cache['hud_speed'] = this.createSprite(6, 6, powerupIcon, { 1: '#8b4513', 2: Colors.POWERUP_RED });
+        this.cache['hud_range'] = this.createSprite(6, 6, powerupIcon, { 1: '#8b4513', 2: Colors.POWERUP_BLUE });
+        this.cache['hud_fire_rate'] = this.createSprite(6, 6, powerupIcon, { 1: '#8b4513', 2: Colors.POWERUP_YELLOW });
+        this.cache['hud_fly'] = this.createSprite(6, 6, powerupIcon, { 1: '#8b4513', 2: Colors.POWERUP_GREEN });
     }
 };
