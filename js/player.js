@@ -26,6 +26,11 @@ class Player {
         this.falling = false;
         this.passingThrough = false; // Per attraversare piattaforme dal basso
 
+        // Stato morte e respawn
+        this.dying = false;
+        this.deathTimer = 0;
+        this.deathAnimFrame = 0;
+
         // Direzione
         this.facing = 1; // 1 = destra, -1 = sinistra
 
@@ -66,6 +71,12 @@ class Player {
     // ===========================================
 
     update(deltaTime) {
+        // Gestione animazione morte
+        if (this.dying) {
+            this.updateDeath(deltaTime);
+            return;
+        }
+
         if (!this.alive) return;
 
         const input = Input.getPlayer(this.playerNum);
@@ -299,9 +310,35 @@ class Player {
     }
 
     die() {
-        this.alive = false;
+        // Inizia animazione morte
+        this.dying = true;
+        this.deathTimer = 1000; // 1 secondo di animazione
+        this.deathAnimFrame = 0;
+        this.vx = 0;
+        this.vy = PLAYER_JUMP_FORCE * 0.7; // Salto all'indietro
         Audio.play('death');
-        // Respawn gestito da Game
+    }
+
+    updateDeath(deltaTime) {
+        const dt = deltaTime;
+        const frameMs = dt * FRAME_TIME;
+
+        // Applica gravità durante animazione morte
+        this.vy += GRAVITY * dt;
+        this.vy = Math.min(this.vy, MAX_FALL_SPEED);
+        this.y += this.vy * dt;
+
+        // Aggiorna timer animazione
+        this.deathTimer -= frameMs;
+
+        // Frame animazione (lampeggio)
+        this.deathAnimFrame = Math.floor(this.deathTimer / 100) % 2;
+
+        // Fine animazione morte
+        if (this.deathTimer <= 0) {
+            this.dying = false;
+            this.alive = false;
+        }
     }
 
     respawn(x, y) {
@@ -398,30 +435,39 @@ class Player {
     // ===========================================
 
     render(ctx) {
-        if (!this.alive) return;
+        if (!this.alive && !this.dying) return;
 
         // Non renderizza durante blink invincibilità
         if (this.invincible && this.invincibleBlink) return;
 
-        const sprite = Sprites.get(this.getSpriteName());
+        // Non renderizza durante frame dispari dell'animazione morte
+        if (this.dying && this.deathAnimFrame === 1) return;
 
-        if (sprite) {
-            ctx.drawImage(
-                sprite,
-                Math.floor(this.x),
-                Math.floor(this.y),
-                this.width,
-                this.height
-            );
+        const sprite = Sprites.get(this.getSpriteName());
+        const drawX = Math.floor(this.x);
+        const drawY = Math.floor(this.y);
+
+        // Durante la morte, ruota lo sprite
+        if (this.dying) {
+            ctx.save();
+            ctx.translate(drawX + this.width / 2, drawY + this.height / 2);
+            ctx.rotate((1 - this.deathTimer / 1000) * Math.PI * 2);
+            ctx.translate(-this.width / 2, -this.height / 2);
+
+            if (sprite) {
+                ctx.drawImage(sprite, 0, 0, this.width, this.height);
+            } else {
+                ctx.fillStyle = this.playerNum === 1 ? Colors.NICK_BLUE : Colors.TOM_GREEN;
+                ctx.fillRect(0, 0, this.width, this.height);
+            }
+
+            ctx.restore();
+        } else if (sprite) {
+            ctx.drawImage(sprite, drawX, drawY, this.width, this.height);
         } else {
             // Fallback: rettangolo colorato
             ctx.fillStyle = this.playerNum === 1 ? Colors.NICK_BLUE : Colors.TOM_GREEN;
-            ctx.fillRect(
-                Math.floor(this.x),
-                Math.floor(this.y),
-                this.width,
-                this.height
-            );
+            ctx.fillRect(drawX, drawY, this.width, this.height);
         }
 
         // Debug hitbox
