@@ -35,6 +35,7 @@ const Game = {
 
     // Menu
     menuSelection: 0,
+    gameOverSelection: 0, // 0 = Continue, 1 = Restart
 
     /**
      * Inizializza il gioco
@@ -291,9 +292,17 @@ const Game = {
         }
 
         // Update players
-        this.players.forEach(player => {
-            if (player.alive) {
+        this.players.forEach((player, index) => {
+            // Aggiorna player vivo o in animazione morte
+            if (player.alive || player.dying) {
                 player.update(this.deltaTime);
+            }
+
+            // Respawn se morto ma ha ancora vite
+            if (!player.alive && !player.dying && player.lives > 0) {
+                const levelData = Levels.get(this.currentLevel);
+                const spawn = levelData.playerSpawns[index] || levelData.playerSpawns[0];
+                player.respawn(spawn.x, spawn.y);
             }
         });
 
@@ -320,9 +329,10 @@ const Game = {
             this.levelComplete();
         }
 
-        // Controlla game over
-        if (this.players.every(p => p.lives <= 0)) {
+        // Controlla game over (tutti i player morti senza vite)
+        if (this.players.every(p => p.lives <= 0 && !p.dying)) {
             this.state = GameState.GAME_OVER;
+            this.gameOverSelection = 0; // Selezione menu Game Over
             Audio.stopMusic();
             Audio.play('gameOver');
         }
@@ -617,9 +627,37 @@ const Game = {
     // ===========================================
 
     updateGameOver() {
-        if (Input.getMenu().confirm) {
-            this.state = GameState.MENU;
+        const menu = Input.getMenu();
+
+        // Navigazione menu
+        if (menu.up || menu.down) {
+            this.gameOverSelection = this.gameOverSelection === 0 ? 1 : 0;
+            Audio.play('menu');
         }
+
+        // Conferma selezione
+        if (menu.confirm) {
+            if (this.gameOverSelection === 0) {
+                // Continue - ricomincia dal livello corrente
+                this.continueGame();
+            } else {
+                // Restart - torna al menu
+                this.state = GameState.MENU;
+            }
+        }
+    },
+
+    continueGame() {
+        // Ripristina vite e ricomincia il livello corrente
+        this.loadLevel(this.currentLevel);
+
+        // Ripristina vite ai player
+        this.players.forEach(player => {
+            player.lives = PLAYER_LIVES;
+        });
+
+        this.state = GameState.PLAYING;
+        Audio.startMusic();
     },
 
     renderGameOver() {
@@ -628,14 +666,34 @@ const Game = {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+        // Titolo GAME OVER
         ctx.fillStyle = '#f00';
         ctx.font = '16px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('GAME OVER', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        ctx.fillText('GAME OVER', CANVAS_WIDTH / 2, 70);
 
+        // Punteggi finali
         ctx.fillStyle = '#fff';
         ctx.font = '8px monospace';
-        ctx.fillText('Press ENTER', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 25);
+        ctx.fillText('SCORE: ' + String(this.scores[0]).padStart(6, '0'), CANVAS_WIDTH / 2, 95);
+        if (this.numPlayers === 2) {
+            ctx.fillText('P2: ' + String(this.scores[1]).padStart(6, '0'), CANVAS_WIDTH / 2, 108);
+        }
+
+        // Opzioni
+        ctx.font = '10px monospace';
+        const options = ['CONTINUE', 'RESTART'];
+
+        options.forEach((opt, i) => {
+            ctx.fillStyle = this.gameOverSelection === i ? '#fff' : '#666';
+            const prefix = this.gameOverSelection === i ? '> ' : '  ';
+            ctx.fillText(prefix + opt, CANVAS_WIDTH / 2, 140 + i * 18);
+        });
+
+        // Istruzioni
+        ctx.fillStyle = '#444';
+        ctx.font = '6px monospace';
+        ctx.fillText('UP/DOWN to select, ENTER to confirm', CANVAS_WIDTH / 2, 200);
 
         ctx.textAlign = 'left';
     },
