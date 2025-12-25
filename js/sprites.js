@@ -17,6 +17,7 @@ const Sprites = {
         this.generatePlatforms();
         this.generatePumpkinHead();
         this.generateEffects();
+        this.generateTitle();
 
         Debug.log('All sprites generated');
     },
@@ -527,5 +528,147 @@ const Sprites = {
         this.cache['particle_white'] = this.createSprite(8, 8, particle, { 1: '#ffffff' });
         this.cache['particle_blue'] = this.createSprite(8, 8, particle, { 1: '#4a9fff' });
         this.cache['particle_yellow'] = this.createSprite(8, 8, particle, { 1: '#ffff4a' });
+    },
+
+    // ===========================================
+    // TITLE SCREEN SPRITES
+    // ===========================================
+
+    generateTitle() {
+        // Palette logo SNOW (celeste/bianco)
+        const snowPalette = {
+            1: '#4a9fff', // blu chiaro
+            2: '#2a6fcf', // blu scuro (ombra)
+            3: '#ffffff', // bianco (highlight)
+            4: '#7fcfff'  // celeste chiaro
+        };
+
+        // Palette logo BROS (arancione/rosso)
+        const brosPalette = {
+            1: '#ff6b4a', // arancione
+            2: '#cf3a2a', // rosso scuro (ombra)
+            3: '#ffff4a', // giallo (highlight)
+            4: '#ff9f7a'  // arancione chiaro
+        };
+
+        // Lettere SNOW (8x12 ciascuna)
+        const letterS = [
+            [0,1,1,1,1,1,1,0],
+            [1,1,3,3,3,3,1,1],
+            [1,1,3,0,0,0,0,0],
+            [1,1,1,0,0,0,0,0],
+            [0,1,1,1,1,1,0,0],
+            [0,0,3,3,3,1,1,0],
+            [0,0,0,0,0,3,1,1],
+            [0,0,0,0,0,3,1,1],
+            [0,0,0,0,0,1,1,1],
+            [1,1,3,3,3,3,1,1],
+            [0,1,1,1,1,1,1,0],
+            [0,0,2,2,2,2,0,0]
+        ];
+
+        const letterN = [
+            [1,1,0,0,0,0,1,1],
+            [1,1,3,0,0,0,1,1],
+            [1,1,1,3,0,0,1,1],
+            [1,1,1,1,0,0,1,1],
+            [1,1,3,1,1,0,1,1],
+            [1,1,0,3,1,1,1,1],
+            [1,1,0,0,1,1,1,1],
+            [1,1,0,0,3,1,1,1],
+            [1,1,0,0,0,3,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [2,2,0,0,0,0,2,2]
+        ];
+
+        const letterO = [
+            [0,1,1,1,1,1,1,0],
+            [1,1,3,3,3,3,1,1],
+            [1,1,3,0,0,3,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,3,3,3,3,1,1],
+            [0,1,1,1,1,1,1,0],
+            [0,0,2,2,2,2,0,0]
+        ];
+
+        const letterW = [
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,3,3,0,1,1],
+            [1,1,0,1,1,0,1,1],
+            [1,1,3,1,1,3,1,1],
+            [1,1,1,1,1,1,1,1],
+            [1,1,1,3,3,1,1,1],
+            [0,1,1,0,0,1,1,0],
+            [0,1,1,0,0,1,1,0],
+            [0,2,2,0,0,2,2,0]
+        ];
+
+        // Lettere BROS (8x12 ciascuna)
+        const letterB = [
+            [1,1,1,1,1,1,0,0],
+            [1,1,3,3,3,1,1,0],
+            [1,1,3,0,0,3,1,1],
+            [1,1,0,0,0,3,1,1],
+            [1,1,3,3,3,1,1,0],
+            [1,1,1,1,1,1,1,0],
+            [1,1,3,0,0,3,1,1],
+            [1,1,0,0,0,0,1,1],
+            [1,1,0,0,0,3,1,1],
+            [1,1,3,3,3,3,1,1],
+            [1,1,1,1,1,1,1,0],
+            [2,2,2,2,2,2,0,0]
+        ];
+
+        const letterR = [
+            [1,1,1,1,1,1,0,0],
+            [1,1,3,3,3,1,1,0],
+            [1,1,3,0,0,3,1,1],
+            [1,1,0,0,0,3,1,1],
+            [1,1,3,3,3,1,1,0],
+            [1,1,1,1,1,1,0,0],
+            [1,1,3,1,1,0,0,0],
+            [1,1,0,3,1,1,0,0],
+            [1,1,0,0,3,1,1,0],
+            [1,1,0,0,0,3,1,1],
+            [1,1,0,0,0,0,1,1],
+            [2,2,0,0,0,0,2,2]
+        ];
+
+        // Genera lettere SNOW
+        this.cache['letter_S'] = this.createSprite(8, 12, letterS, snowPalette);
+        this.cache['letter_N'] = this.createSprite(8, 12, letterN, snowPalette);
+        this.cache['letter_O_snow'] = this.createSprite(8, 12, letterO, snowPalette);
+        this.cache['letter_W'] = this.createSprite(8, 12, letterW, snowPalette);
+
+        // Genera lettere BROS
+        this.cache['letter_B'] = this.createSprite(8, 12, letterB, brosPalette);
+        this.cache['letter_R'] = this.createSprite(8, 12, letterR, brosPalette);
+        this.cache['letter_O_bros'] = this.createSprite(8, 12, letterO, brosPalette);
+        // Riusa S per BROS ma con palette arancione
+        this.cache['letter_S_bros'] = this.createSprite(8, 12, letterS, brosPalette);
+
+        // Fiocco di neve decorativo (8x8)
+        const snowflake = [
+            [0,0,0,1,1,0,0,0],
+            [0,1,0,1,1,0,1,0],
+            [0,0,1,1,1,1,0,0],
+            [1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1],
+            [0,0,1,1,1,1,0,0],
+            [0,1,0,1,1,0,1,0],
+            [0,0,0,1,1,0,0,0]
+        ];
+
+        this.cache['snowflake'] = this.createSprite(8, 8, snowflake, { 1: '#ffffff' });
+        this.cache['snowflake_blue'] = this.createSprite(8, 8, snowflake, { 1: '#4a9fff' });
     }
 };

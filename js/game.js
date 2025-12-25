@@ -37,6 +37,12 @@ const Game = {
     menuSelection: 0,
     gameOverSelection: 0, // 0 = Continue, 1 = Restart
 
+    // Animazione titolo
+    titleTimer: 0,
+    titleSnowflakes: [],
+    titleTransition: false,
+    titleTransitionTimer: 0,
+
     /**
      * Inizializza il gioco
      */
@@ -51,11 +57,30 @@ const Game = {
         // Genera sprites
         Sprites.generateAll();
 
+        // Inizializza fiocchi di neve per schermata titolo
+        this.initTitleSnowflakes();
+
         // Avvia game loop
         this.lastTime = performance.now();
         requestAnimationFrame((time) => this.loop(time));
 
         Debug.log('Game initialized');
+    },
+
+    /**
+     * Inizializza fiocchi di neve decorativi per la schermata titolo
+     */
+    initTitleSnowflakes() {
+        this.titleSnowflakes = [];
+        for (let i = 0; i < 20; i++) {
+            this.titleSnowflakes.push({
+                x: randomRange(0, CANVAS_WIDTH),
+                y: randomRange(0, CANVAS_HEIGHT),
+                speed: randomFloat(0.3, 0.8),
+                size: randomChoice([0.5, 0.75, 1]),
+                wobble: randomFloat(0, Math.PI * 2)
+            });
+        }
     },
 
     /**
@@ -152,6 +177,22 @@ const Game = {
     // ===========================================
 
     updateMenu() {
+        // Aggiorna timer animazione titolo
+        this.titleTimer += this.deltaTime * FRAME_TIME;
+
+        // Aggiorna fiocchi di neve
+        this.updateTitleSnowflakes();
+
+        // Gestione transizione
+        if (this.titleTransition) {
+            this.titleTransitionTimer -= this.deltaTime * FRAME_TIME;
+            if (this.titleTransitionTimer <= 0) {
+                this.titleTransition = false;
+                this.startGame();
+            }
+            return;
+        }
+
         const menu = Input.getMenu();
 
         if (menu.up || menu.down) {
@@ -164,41 +205,167 @@ const Game = {
                 this.menuSelection = 1;
             }
             this.numPlayers = this.menuSelection + 1;
-            this.startGame();
+            // Avvia transizione
+            this.titleTransition = true;
+            this.titleTransitionTimer = 500; // 500ms di transizione
+            Audio.play('start');
+        }
+    },
+
+    updateTitleSnowflakes() {
+        for (const flake of this.titleSnowflakes) {
+            flake.y += flake.speed * this.deltaTime;
+            flake.wobble += 0.02 * this.deltaTime;
+            flake.x += Math.sin(flake.wobble) * 0.3;
+
+            // Riposiziona fiocchi usciti dallo schermo
+            if (flake.y > CANVAS_HEIGHT + 10) {
+                flake.y = -10;
+                flake.x = randomRange(0, CANVAS_WIDTH);
+            }
+            if (flake.x < -10) flake.x = CANVAS_WIDTH + 10;
+            if (flake.x > CANVAS_WIDTH + 10) flake.x = -10;
         }
     },
 
     renderMenu() {
         const ctx = this.ctx;
 
-        // Titolo
-        ctx.fillStyle = '#fff';
-        ctx.font = '16px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('SNOW BROS', CANVAS_WIDTH / 2, 60);
+        // Sfondo sfumato
+        const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradient.addColorStop(0, '#0a0a1e');
+        gradient.addColorStop(0.5, '#1a1a3e');
+        gradient.addColorStop(1, '#0a0a1e');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // Sottotitolo
+        // Fiocchi di neve decorativi
+        this.renderTitleSnowflakes();
+
+        // Calcola oscillazione titolo
+        const titleBob = Math.sin(this.titleTimer / 300) * 3;
+        const letterSpacing = 10;
+
+        // Disegna logo SNOW (con sprite)
+        const snowLetters = ['letter_S', 'letter_N', 'letter_O_snow', 'letter_W'];
+        const snowStartX = CANVAS_WIDTH / 2 - (snowLetters.length * letterSpacing) / 2 - 8;
+        const snowY = 35 + titleBob;
+
+        for (let i = 0; i < snowLetters.length; i++) {
+            const sprite = Sprites.get(snowLetters[i]);
+            if (sprite) {
+                const letterBob = Math.sin(this.titleTimer / 200 + i * 0.5) * 2;
+                ctx.drawImage(sprite, snowStartX + i * letterSpacing, snowY + letterBob);
+            }
+        }
+
+        // Disegna logo BROS (con sprite)
+        const brosLetters = ['letter_B', 'letter_R', 'letter_O_bros', 'letter_S_bros'];
+        const brosStartX = CANVAS_WIDTH / 2 - (brosLetters.length * letterSpacing) / 2 - 8;
+        const brosY = 52 + titleBob;
+
+        for (let i = 0; i < brosLetters.length; i++) {
+            const sprite = Sprites.get(brosLetters[i]);
+            if (sprite) {
+                const letterBob = Math.sin(this.titleTimer / 200 + i * 0.5 + Math.PI) * 2;
+                ctx.drawImage(sprite, brosStartX + i * letterSpacing, brosY + letterBob);
+            }
+        }
+
+        // Fiocchi decorativi ai lati del logo
+        const snowflake = Sprites.get('snowflake_blue');
+        if (snowflake) {
+            const flakeY = 45 + Math.sin(this.titleTimer / 400) * 4;
+            ctx.drawImage(snowflake, snowStartX - 16, flakeY);
+            ctx.drawImage(snowflake, brosStartX + brosLetters.length * letterSpacing + 8, flakeY);
+        }
+
+        // Sottotitolo "Nick & Tom"
         ctx.font = '8px monospace';
-        ctx.fillStyle = Colors.NICK_BLUE;
-        ctx.fillText('Nick & Tom', CANVAS_WIDTH / 2, 75);
+        ctx.textAlign = 'center';
+        const subtitleAlpha = 0.7 + Math.sin(this.titleTimer / 500) * 0.3;
+        ctx.fillStyle = `rgba(74, 159, 255, ${subtitleAlpha})`;
+        ctx.fillText('Nick & Tom', CANVAS_WIDTH / 2, 82);
 
-        // Opzioni
-        ctx.font = '10px monospace';
+        // Personaggi Nick e Tom decorativi
+        const nickSprite = Sprites.get('nick_idle');
+        const tomSprite = Sprites.get('tom_idle');
+        if (nickSprite && tomSprite) {
+            const charY = 92;
+            const charBob = Math.sin(this.titleTimer / 300) * 2;
+            ctx.drawImage(nickSprite, CANVAS_WIDTH / 2 - 30, charY + charBob);
+            ctx.drawImage(tomSprite, CANVAS_WIDTH / 2 + 14, charY - charBob);
+        }
+
+        // Opzioni menu
+        ctx.font = '8px monospace';
         const options = ['1 PLAYER', '2 PLAYERS'];
+        const menuY = 135;
 
         options.forEach((opt, i) => {
-            ctx.fillStyle = this.menuSelection === i ? '#fff' : '#888';
-            const prefix = this.menuSelection === i ? '> ' : '  ';
-            ctx.fillText(prefix + opt, CANVAS_WIDTH / 2, 120 + i * 20);
+            const isSelected = this.menuSelection === i;
+            const selectPulse = isSelected ? Math.sin(this.titleTimer / 100) * 0.2 + 0.8 : 0.5;
+
+            if (isSelected) {
+                // Freccia animata
+                const arrowX = CANVAS_WIDTH / 2 - 45 + Math.sin(this.titleTimer / 150) * 3;
+                ctx.fillStyle = '#fff';
+                ctx.fillText('>', arrowX, menuY + i * 16);
+                ctx.fillStyle = `rgba(255, 255, 255, ${selectPulse})`;
+            } else {
+                ctx.fillStyle = '#666';
+            }
+
+            ctx.fillText(opt, CANVAS_WIDTH / 2, menuY + i * 16);
         });
 
         // Istruzioni
-        ctx.fillStyle = '#666';
+        ctx.fillStyle = '#444';
         ctx.font = '6px monospace';
-        ctx.fillText('PRESS ENTER OR SPACE TO START', CANVAS_WIDTH / 2, 180);
-        ctx.fillText('P1: ARROWS + SPACE | P2: WASD + Q', CANVAS_WIDTH / 2, 195);
+        ctx.fillText('PRESS ENTER TO START', CANVAS_WIDTH / 2, 180);
+
+        // Controlli
+        ctx.fillStyle = '#555';
+        ctx.fillText('P1: ARROWS + SPACE', CANVAS_WIDTH / 2, 195);
+        ctx.fillText('P2: WASD + Q', CANVAS_WIDTH / 2, 205);
+
+        // Credits
+        ctx.fillStyle = '#333';
+        ctx.fillText('© 2024 SNOW BROS CLONE', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 8);
+
+        // Effetto transizione (fade out)
+        if (this.titleTransition) {
+            const alpha = 1 - (this.titleTransitionTimer / 500);
+            ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
 
         ctx.textAlign = 'left';
+    },
+
+    renderTitleSnowflakes() {
+        const ctx = this.ctx;
+        const snowflake = Sprites.get('snowflake');
+
+        for (const flake of this.titleSnowflakes) {
+            if (snowflake) {
+                ctx.globalAlpha = 0.3 + flake.size * 0.4;
+                ctx.drawImage(
+                    snowflake,
+                    flake.x - 4 * flake.size,
+                    flake.y - 4 * flake.size,
+                    8 * flake.size,
+                    8 * flake.size
+                );
+            } else {
+                // Fallback: cerchio bianco
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + flake.size * 0.4})`;
+                ctx.beginPath();
+                ctx.arc(flake.x, flake.y, 2 * flake.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        ctx.globalAlpha = 1;
     },
 
     // ===========================================
@@ -212,8 +379,7 @@ const Game = {
 
         this.loadLevel(this.currentLevel);
 
-        Audio.play('start');
-        // Avvia musica dopo la fanfara di start
+        // Avvia musica dopo la fanfara di start (audio start già suonato nella transizione)
         setTimeout(() => Audio.startMusic(), 400);
         Debug.log('Game started with', this.numPlayers, 'player(s)');
     },
@@ -643,6 +809,7 @@ const Game = {
             } else {
                 // Restart - torna al menu
                 this.state = GameState.MENU;
+                this.initTitleSnowflakes();
             }
         }
     },
@@ -705,6 +872,7 @@ const Game = {
     updateVictory() {
         if (Input.getMenu().confirm) {
             this.state = GameState.MENU;
+            this.initTitleSnowflakes();
         }
     },
 
