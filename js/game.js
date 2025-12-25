@@ -207,6 +207,8 @@ const Game = {
         this.loadLevel(this.currentLevel);
 
         Audio.play('start');
+        // Avvia musica dopo la fanfara di start
+        setTimeout(() => Audio.startMusic(), 400);
         Debug.log('Game started with', this.numPlayers, 'player(s)');
     },
 
@@ -249,6 +251,7 @@ const Game = {
         // Pausa
         if (Input.isPausePressed()) {
             this.state = GameState.PAUSED;
+            Audio.stopMusic();
             Audio.play('pause');
             return;
         }
@@ -289,6 +292,7 @@ const Game = {
         // Controlla game over
         if (this.players.every(p => p.lives <= 0)) {
             this.state = GameState.GAME_OVER;
+            Audio.stopMusic();
             Audio.play('gameOver');
         }
     },
@@ -382,6 +386,8 @@ const Game = {
             if (this.currentLevel === 11) {
                 // TODO: Boss fight
                 this.state = GameState.VICTORY;
+                Audio.stopMusic();
+                Audio.play('victory');
             }
         } else {
             this.loadLevel(this.currentLevel);
@@ -462,6 +468,7 @@ const Game = {
         if (Input.isPausePressed()) {
             this.state = GameState.PLAYING;
             Audio.play('pause');
+            Audio.startMusic();
         }
     },
 
