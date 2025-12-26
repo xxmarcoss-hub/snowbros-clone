@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Sprite Extractor - Auto Detection</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 { color: #0ff; margin-bottom: 5px; }
+        .subtitle { color: #888; margin-bottom: 20px; }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+
+        .panel {
+            background: #252540;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        #sourceContainer {
+            overflow: auto;
+            max-height: 500px;
+            position: relative;
+        }
+
+        #source {
+            image-rendering: pixelated;
+            cursor: crosshair;
+        }
+        #source.eyedropper-active {
+            cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="%23fff" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="%23fff"/></svg>') 12 12, crosshair;
+        }
+        #sourceContainer.eyedropper-active .frame-overlay {
+            pointer-events: none;
+        }
+        #sourceContainer.eyedropper-active {
+            cursor: crosshair;
+        }
+        #eyedropperBtn.active {
+            background: #f0f;
+            color: #000;
+        }
+
+        .frame-overlay {
+            position: absolute;
+            border: 3px solid #ff0000;
+            background: rgba(255, 0, 0, 0.15);
+            box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgba(255,255,255,0.3);
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 2px;
+        }
+        .frame-overlay:hover {
+            border-color: #ffff00;
+            background: rgba(255, 255, 0, 0.3);
+        }
+        .frame-overlay.selected {
+            border-color: #ff00ff;
+            background: rgba(255, 0, 255, 0.3);
+            box-shadow: 0 0 0 2px #000, 0 0 10px #ff00ff;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #3a3a5c;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #4a4a7c; }
+        button.primary { background: #0a84ff; }
+        button.success { background: #30d158; }
+        button.danger { background: #ff453a; }
+
+        input, select {
+            background: #3a3a5c;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 6px 10px;
+            border-radius: 4px;
+        }
+
+        label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+        }
+
+        #detectedFrames {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .detected-frame {
+            background: #1a1a2e;
+            padding: 5px;
+            border-radius: 4px;
+            text-align: center;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .detected-frame:hover { border-color: #0ff; }
+        .detected-frame.selected { border-color: #f0f; }
+        .detected-frame canvas {
+            image-rendering: pixelated;
+            max-width: 100%;
+            background: #000;
+        }
+        .detected-frame .frame-id {
+            font-size: 10px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        #animations {
+            margin-top: 20px;
+        }
+
+        .animation-group {
+            background: #1a1a2e;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .animation-group h4 {
+            margin: 0 0 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .animation-group h4 input {
+            width: 120px;
+        }
+        .animation-frames {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            min-height: 50px;
+            background: #252540;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        .animation-frames canvas {
+            image-rendering: pixelated;
+            border: 1px solid #444;
+        }
+        .anim-frame-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 4px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            cursor: grab;
+        }
+        .anim-frame-container:hover {
+            background: #2a2a4e;
+        }
+        .anim-frame-container:active {
+            cursor: grabbing;
+        }
+
+        .preview-container {
+            text-align: center;
+            margin-top: 15px;
+        }
+        #animationPreview {
+            image-rendering: pixelated;
+            background: #000;
+            border: 1px solid #444;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .status.info { background: #0a84ff33; border: 1px solid #0a84ff; }
+        .status.success { background: #30d15833; border: 1px solid #30d158; }
+    </style>
+</head>
+<body>
+    <h1>🎮 Sprite Extractor</h1>
+    <p class="subtitle">Auto-detection e raggruppamento animazioni</p>
+
+    <div class="controls">
+        <label>
+            Background:
+            <input type="color" id="bgColor" value="#98d898" onchange="updateColorPreview()">
+            <span id="colorPreview" style="display:inline-block; width:60px; height:24px; background:#98d898; border:2px solid #fff; border-radius:4px; vertical-align:middle; margin:0 5px;"></span>
+            <span id="colorHex" style="font-family:monospace; color:#0ff;">#98d898</span>
+            <button id="eyedropperBtn" onclick="toggleEyedropper()" title="Seleziona colore dall'immagine">🎯 Pick</button>
+        </label>
+        <label>
+            Tolleranza:
+            <input type="number" id="tolerance" value="30" min="0" max="100" style="width:60px">
+        </label>
+        <label>
+            Min size:
+            <input type="number" id="minSize" value="8" min="1" max="50" style="width:60px">
+        </label>
+        <label>
+            Zoom:
+            <input type="number" id="zoom" value="3" min="1" max="8" style="width:50px">
+        </label>
+        <button class="primary" onclick="detectFrames()">🔍 Rileva Frame</button>
+        <button onclick="clearSelection()">Deseleziona</button>
+    </div>
+
+    <div class="main-container">
+        <div>
+            <div class="panel">
+                <div id="status" class="status info">Caricamento sprite sheet...</div>
+                <div id="sourceContainer">
+                    <canvas id="source"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="panel">
+                <h3>Frame Rilevati <span id="selectionCount" style="color:#888; font-weight:normal; font-size:14px;"></span></h3>
+                <div style="margin-bottom:10px; display:flex; gap:8px;">
+                    <button onclick="selectAllFrames()">☑ Tutti</button>
+                    <button onclick="clearSelection()">☐ Nessuno</button>
+                    <button onclick="invertSelection()">⇄ Inverti</button>
+                </div>
+                <div id="detectedFrames"></div>
+
+                <div style="margin-top:15px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="success" onclick="addSelectedToAnimation()">+ Aggiungi a Animazione</button>
+                    <button class="primary" onclick="exportSelectedFrames()">💾 Esporta Selezionati</button>
+                    <button onclick="exportAllFrames()">📦 Esporta Tutti i Frame</button>
+                </div>
+            </div>
+
+            <div class="panel" id="animations">
+                <h3>Animazioni</h3>
+                <div id="animationList"></div>
+                <button onclick="createAnimation()">+ Nuova Animazione</button>
+            </div>
+
+            <div class="panel preview-container">
+                <h3>Preview Animazione</h3>
+                <canvas id="animationPreview" width="64" height="64"></canvas>
+                <div style="margin-top:10px">
+                    <label>FPS: <input type="number" id="previewFps" value="8" min="1" max="30" style="width:50px" onchange="updatePreviewSpeed()"></label>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Esporta</h3>
+                <button class="success" onclick="exportAll()">📦 Esporta Tutto</button>
+                <button onclick="exportJSON()">📄 Esporta JSON</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let img = new Image();
+        let zoom = 3;
+        let frames = [];
+        let selectedFrames = new Set();
+        let animations = {};
+        let currentAnimation = null;
+        let previewInterval = null;
+        let previewFrame = 0;
+        let eyedropperActive = false;
+
+        const sourceCanvas = document.getElementById('source');
+        const sourceCtx = sourceCanvas.getContext('2d');
+        const container = document.getElementById('sourceContainer');
+
+        // Eyedropper functions
+        function toggleEyedropper() {
+            eyedropperActive = !eyedropperActive;
+            document.getElementById('eyedropperBtn').classList.toggle('active', eyedropperActive);
+            sourceCanvas.classList.toggle('eyedropper-active', eyedropperActive);
+            container.classList.toggle('eyedropper-active', eyedropperActive);
+
+            if (eyedropperActive) {
+                document.getElementById('status').textContent = '🎯 Clicca sull\'immagine per selezionare il colore di background';
+                document.getElementById('status').className = 'status info';
+            } else {
+                document.getElementById('status').textContent = `Sprite sheet caricata: ${img.width}x${img.height}px`;
+                document.getElementById('status').className = 'status success';
+            }
+        }
+
+        function pickColor(e) {
+            if (!eyedropperActive) return;
+
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / zoom);
+            const y = Math.floor((e.clientY - rect.top) / zoom);
+
+            // Get pixel color from original image
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(img, 0, 0);
+            const pixel = tempCtx.getImageData(x, y, 1, 1).data;
+
+            const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+            document.getElementById('bgColor').value = hex;
+            updateColorPreview();
+
+            // Disable eyedropper and re-detect
+            toggleEyedropper();
+            detectFrames();
+        }
+
+        function updateColorPreview() {
+            const hex = document.getElementById('bgColor').value;
+            document.getElementById('colorPreview').style.background = hex;
+            document.getElementById('colorHex').textContent = hex;
+        }
+
+        sourceCanvas.addEventListener('click', function(e) {
+            if (eyedropperActive) {
+                pickColor(e);
+                e.stopPropagation();
+            }
+        });
+
+        // Load image
+        img.onload = function() {
+            document.getElementById('status').textContent = `Sprite sheet caricata: ${img.width}x${img.height}px`;
+            document.getElementById('status').className = 'status success';
+            drawSource();
+            detectFrames();
+        };
+        img.onerror = function() {
+            document.getElementById('status').textContent = 'Errore: impossibile caricare sprite sheet';
+            document.getElementById('status').className = 'status danger';
+        };
+        img.src = '../assets/images/snowbros_nick.png';
+
+        function drawSource() {
+            zoom = parseInt(document.getElementById('zoom').value) || 3;
+            sourceCanvas.width = img.width * zoom;
+            sourceCanvas.height = img.height * zoom;
+            sourceCtx.imageSmoothingEnabled = false;
+            sourceCtx.drawImage(img, 0, 0, img.width * zoom, img.height * zoom);
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+
+        function isBackground(r, g, b, bgColor, tolerance) {
+            return Math.abs(r - bgColor.r) < tolerance &&
+                   Math.abs(g - bgColor.g) < tolerance &&
+                   Math.abs(b - bgColor.b) < tolerance;
+        }
+
+        function detectFrames() {
+            frames = [];
+            selectedFrames.clear();
+
+            const bgColor = hexToRgb(document.getElementById('bgColor').value);
+            const tolerance = parseInt(document.getElementById('tolerance').value) || 30;
+            const minSize = parseInt(document.getElementById('minSize').value) || 8;
+
+            // Get image data
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(img, 0, 0);
+            const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+            const data = imageData.data;
+
+            // Create visited array
+            const visited = new Array(img.width * img.height).fill(false);
+            const isSprite = new Array(img.width * img.height).fill(false);
+
+            // Mark non-background pixels
+            for (let i = 0; i < data.length; i += 4) {
+                const idx = i / 4;
+                if (!isBackground(data[i], data[i+1], data[i+2], bgColor, tolerance) && data[i+3] > 0) {
+                    isSprite[idx] = true;
+                }
+            }
+
+            // Find connected components (sprites)
+            function floodFill(startX, startY) {
+                const bounds = { minX: startX, maxX: startX, minY: startY, maxY: startY };
+                const stack = [[startX, startY]];
+
+                while (stack.length > 0) {
+                    const [x, y] = stack.pop();
+                    const idx = y * img.width + x;
+
+                    if (x < 0 || x >= img.width || y < 0 || y >= img.height) continue;
+                    if (visited[idx] || !isSprite[idx]) continue;
+
+                    visited[idx] = true;
+                    bounds.minX = Math.min(bounds.minX, x);
+                    bounds.maxX = Math.max(bounds.maxX, x);
+                    bounds.minY = Math.min(bounds.minY, y);
+                    bounds.maxY = Math.max(bounds.maxY, y);
+
+                    // Check 8 neighbors
+                    for (let dx = -1; dx <= 1; dx++) {
+                        for (let dy = -1; dy <= 1; dy++) {
+                            if (dx !== 0 || dy !== 0) {
+                                stack.push([x + dx, y + dy]);
+                            }
+                        }
+                    }
+                }
+
+                return bounds;
+            }
+
+            // Scan for sprites
+            for (let y = 0; y < img.height; y++) {
+                for (let x = 0; x < img.width; x++) {
+                    const idx = y * img.width + x;
+                    if (!visited[idx] && isSprite[idx]) {
+                        const bounds = floodFill(x, y);
+                        const w = bounds.maxX - bounds.minX + 1;
+                        const h = bounds.maxY - bounds.minY + 1;
+
+                        if (w >= minSize && h >= minSize) {
+                            frames.push({
+                                id: frames.length,
+                                x: bounds.minX,
+                                y: bounds.minY,
+                                width: w,
+                                height: h
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Sort frames by position (top to bottom, left to right)
+            frames.sort((a, b) => {
+                const rowA = Math.floor(a.y / 20);
+                const rowB = Math.floor(b.y / 20);
+                if (rowA !== rowB) return rowA - rowB;
+                return a.x - b.x;
+            });
+
+            // Re-assign IDs after sorting
+            frames.forEach((f, i) => f.id = i);
+
+            document.getElementById('status').textContent = `Rilevati ${frames.length} frame`;
+            document.getElementById('status').className = 'status success';
+
+            renderFrameOverlays();
+            renderDetectedFrames();
+        }
+
+        function renderFrameOverlays() {
+            // Remove old overlays
+            container.querySelectorAll('.frame-overlay').forEach(el => el.remove());
+
+            drawSource();
+
+            frames.forEach((frame, i) => {
+                const div = document.createElement('div');
+                div.className = 'frame-overlay' + (selectedFrames.has(i) ? ' selected' : '');
+                div.style.left = (frame.x * zoom) + 'px';
+                div.style.top = (frame.y * zoom) + 'px';
+                div.style.width = (frame.width * zoom) + 'px';
+                div.style.height = (frame.height * zoom) + 'px';
+                div.textContent = i;
+                div.onclick = () => toggleFrameSelection(i);
+                container.appendChild(div);
+            });
+        }
+
+        function renderDetectedFrames() {
+            const container = document.getElementById('detectedFrames');
+            container.innerHTML = '';
+
+            const bgColor = hexToRgb(document.getElementById('bgColor').value);
+            const tolerance = parseInt(document.getElementById('tolerance').value) || 30;
+
+            frames.forEach((frame, i) => {
+                const div = document.createElement('div');
+                div.className = 'detected-frame' + (selectedFrames.has(i) ? ' selected' : '');
+                div.onclick = () => toggleFrameSelection(i);
+
+                const canvas = extractFrameCanvas(frame, bgColor, tolerance);
+                const displayCanvas = document.createElement('canvas');
+                const scale = Math.min(50 / frame.width, 50 / frame.height, 3);
+                displayCanvas.width = frame.width * scale;
+                displayCanvas.height = frame.height * scale;
+                const ctx = displayCanvas.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(canvas, 0, 0, displayCanvas.width, displayCanvas.height);
+
+                const idDiv = document.createElement('div');
+                idDiv.className = 'frame-id';
+                idDiv.textContent = `#${i}`;
+
+                div.appendChild(displayCanvas);
+                div.appendChild(idDiv);
+                container.appendChild(div);
+            });
+        }
+
+        function extractFrameCanvas(frame, bgColor, tolerance) {
+            const canvas = document.createElement('canvas');
+            canvas.width = frame.width;
+            canvas.height = frame.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, frame.x, frame.y, frame.width, frame.height, 0, 0, frame.width, frame.height);
+
+            // Remove background
+            const imageData = ctx.getImageData(0, 0, frame.width, frame.height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                if (isBackground(data[i], data[i+1], data[i+2], bgColor, tolerance)) {
+                    data[i+3] = 0;
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+
+            return canvas;
+        }
+
+        function toggleFrameSelection(idx) {
+            if (selectedFrames.has(idx)) {
+                selectedFrames.delete(idx);
+            } else {
+                selectedFrames.add(idx);
+            }
+            updateSelectionUI();
+        }
+
+        function clearSelection() {
+            selectedFrames.clear();
+            updateSelectionUI();
+        }
+
+        function selectAllFrames() {
+            frames.forEach((_, i) => selectedFrames.add(i));
+            updateSelectionUI();
+        }
+
+        function invertSelection() {
+            frames.forEach((_, i) => {
+                if (selectedFrames.has(i)) {
+                    selectedFrames.delete(i);
+                } else {
+                    selectedFrames.add(i);
+                }
+            });
+            updateSelectionUI();
+        }
+
+        function updateSelectionUI() {
+            renderFrameOverlays();
+            renderDetectedFrames();
+            document.getElementById('selectionCount').textContent =
+                selectedFrames.size > 0 ? `(${selectedFrames.size}/${frames.length} selezionati)` : '';
+        }
+
+        function createAnimation(name = null) {
+            const animName = name || prompt('Nome animazione (es: idle, walk, jump):', 'anim_' + Object.keys(animations).length);
+            if (!animName) return;
+
+            animations[animName] = [];
+            currentAnimation = animName;
+            renderAnimations();
+        }
+
+        function addSelectedToAnimation() {
+            if (!currentAnimation) {
+                createAnimation();
+                if (!currentAnimation) return;
+            }
+
+            const bgColor = hexToRgb(document.getElementById('bgColor').value);
+            const tolerance = parseInt(document.getElementById('tolerance').value) || 30;
+
+            const sortedSelected = Array.from(selectedFrames).sort((a, b) => a - b);
+            sortedSelected.forEach(idx => {
+                animations[currentAnimation].push({
+                    frameIdx: idx,
+                    canvas: extractFrameCanvas(frames[idx], bgColor, tolerance)
+                });
+            });
+
+            clearSelection();
+            renderAnimations();
+            startPreview();
+        }
+
+        let draggedFrameIndex = null;
+        let draggedAnimationName = null;
+
+        function renderAnimations() {
+            const container = document.getElementById('animationList');
+            container.innerHTML = '';
+
+            Object.entries(animations).forEach(([name, frameList]) => {
+                const div = document.createElement('div');
+                div.className = 'animation-group';
+
+                // Header con nome
+                const header = document.createElement('h4');
+                const nameInput = document.createElement('input');
+                nameInput.value = name;
+                nameInput.onchange = () => renameAnimation(name, nameInput.value);
+                header.appendChild(nameInput);
+
+                // Bottoni azione animazione
+                const btnContainer = document.createElement('div');
+                btnContainer.style.cssText = 'display:flex; gap:4px; flex-wrap:wrap; margin-top:5px;';
+
+                const selectBtn = document.createElement('button');
+                selectBtn.textContent = currentAnimation === name ? '[Attiva]' : 'Seleziona';
+                selectBtn.style.background = currentAnimation === name ? '#30d158' : '';
+                selectBtn.onclick = () => { currentAnimation = name; renderAnimations(); startPreview(); };
+
+                const duplicateBtn = document.createElement('button');
+                duplicateBtn.textContent = 'Duplica';
+                duplicateBtn.onclick = () => duplicateAnimation(name);
+
+                const mirrorBtn = document.createElement('button');
+                mirrorBtn.textContent = 'Specchia';
+                mirrorBtn.onclick = () => mirrorAnimation(name);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'danger';
+                deleteBtn.textContent = 'X';
+                deleteBtn.onclick = () => { delete animations[name]; if(currentAnimation === name) currentAnimation = null; renderAnimations(); };
+
+                btnContainer.appendChild(selectBtn);
+                btnContainer.appendChild(duplicateBtn);
+                btnContainer.appendChild(mirrorBtn);
+                btnContainer.appendChild(deleteBtn);
+
+                // Container frame con drag & drop
+                const framesDiv = document.createElement('div');
+                framesDiv.className = 'animation-frames';
+                framesDiv.dataset.animation = name;
+
+                frameList.forEach((f, i) => {
+                    const frameContainer = document.createElement('div');
+                    frameContainer.className = 'anim-frame-container';
+                    frameContainer.draggable = true;
+                    frameContainer.dataset.index = i;
+
+                    const canvas = document.createElement('canvas');
+                    const scale = 2;
+                    canvas.width = f.canvas.width * scale;
+                    canvas.height = f.canvas.height * scale;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(f.canvas, 0, 0, canvas.width, canvas.height);
+                    canvas.title = `Frame ${i} (trascina per spostare)`;
+
+                    // Bottoni sotto il frame
+                    const frameBtns = document.createElement('div');
+                    frameBtns.style.cssText = 'display:flex; gap:2px; margin-top:2px;';
+
+                    const dupFrameBtn = document.createElement('button');
+                    dupFrameBtn.textContent = '+';
+                    dupFrameBtn.title = 'Duplica frame';
+                    dupFrameBtn.style.cssText = 'padding:2px 6px; font-size:10px;';
+                    dupFrameBtn.onclick = (e) => { e.stopPropagation(); duplicateFrame(name, i); };
+
+                    const delFrameBtn = document.createElement('button');
+                    delFrameBtn.textContent = 'x';
+                    delFrameBtn.title = 'Elimina frame';
+                    delFrameBtn.className = 'danger';
+                    delFrameBtn.style.cssText = 'padding:2px 6px; font-size:10px;';
+                    delFrameBtn.onclick = (e) => { e.stopPropagation(); frameList.splice(i, 1); renderAnimations(); };
+
+                    frameBtns.appendChild(dupFrameBtn);
+                    frameBtns.appendChild(delFrameBtn);
+
+                    frameContainer.appendChild(canvas);
+                    frameContainer.appendChild(frameBtns);
+
+                    // Drag events
+                    frameContainer.ondragstart = (e) => {
+                        draggedFrameIndex = i;
+                        draggedAnimationName = name;
+                        e.dataTransfer.effectAllowed = 'move';
+                        frameContainer.style.opacity = '0.5';
+                    };
+                    frameContainer.ondragend = () => {
+                        frameContainer.style.opacity = '1';
+                        draggedFrameIndex = null;
+                        draggedAnimationName = null;
+                    };
+                    frameContainer.ondragover = (e) => {
+                        e.preventDefault();
+                        if (draggedAnimationName === name) {
+                            frameContainer.style.borderLeft = '3px solid #0ff';
+                        }
+                    };
+                    frameContainer.ondragleave = () => {
+                        frameContainer.style.borderLeft = '';
+                    };
+                    frameContainer.ondrop = (e) => {
+                        e.preventDefault();
+                        frameContainer.style.borderLeft = '';
+                        if (draggedAnimationName === name && draggedFrameIndex !== null && draggedFrameIndex !== i) {
+                            moveFrame(name, draggedFrameIndex, i);
+                        }
+                    };
+
+                    framesDiv.appendChild(frameContainer);
+                });
+
+                div.appendChild(header);
+                div.appendChild(btnContainer);
+                div.appendChild(framesDiv);
+                container.appendChild(div);
+            });
+        }
+
+        function duplicateAnimation(name) {
+            const newName = name + '_copy';
+            animations[newName] = animations[name].map(f => ({
+                frameIdx: f.frameIdx,
+                canvas: cloneCanvas(f.canvas)
+            }));
+            renderAnimations();
+        }
+
+        function mirrorAnimation(name) {
+            animations[name].forEach(f => {
+                const mirrored = document.createElement('canvas');
+                mirrored.width = f.canvas.width;
+                mirrored.height = f.canvas.height;
+                const ctx = mirrored.getContext('2d');
+                ctx.translate(mirrored.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(f.canvas, 0, 0);
+                f.canvas = mirrored;
+            });
+            renderAnimations();
+            startPreview();
+        }
+
+        function duplicateFrame(animName, index) {
+            const original = animations[animName][index];
+            const copy = {
+                frameIdx: original.frameIdx,
+                canvas: cloneCanvas(original.canvas)
+            };
+            animations[animName].splice(index + 1, 0, copy);
+            renderAnimations();
+        }
+
+        function moveFrame(animName, fromIndex, toIndex) {
+            const frameList = animations[animName];
+            const [moved] = frameList.splice(fromIndex, 1);
+            frameList.splice(toIndex, 0, moved);
+            renderAnimations();
+        }
+
+        function cloneCanvas(original) {
+            const clone = document.createElement('canvas');
+            clone.width = original.width;
+            clone.height = original.height;
+            const ctx = clone.getContext('2d');
+            ctx.drawImage(original, 0, 0);
+            return clone;
+        }
+
+        function renameAnimation(oldName, newName) {
+            if (oldName === newName || !newName) return;
+            animations[newName] = animations[oldName];
+            delete animations[oldName];
+            if (currentAnimation === oldName) currentAnimation = newName;
+            renderAnimations();
+        }
+
+        function startPreview() {
+            if (previewInterval) clearInterval(previewInterval);
+            previewFrame = 0;
+
+            const fps = parseInt(document.getElementById('previewFps').value) || 8;
+            previewInterval = setInterval(renderPreview, 1000 / fps);
+        }
+
+        function updatePreviewSpeed() {
+            startPreview();
+        }
+
+        function renderPreview() {
+            const canvas = document.getElementById('animationPreview');
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+
+            if (!currentAnimation || !animations[currentAnimation] || animations[currentAnimation].length === 0) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, 64, 64);
+                return;
+            }
+
+            const frameList = animations[currentAnimation];
+            previewFrame = previewFrame % frameList.length;
+            const frame = frameList[previewFrame];
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, 64, 64);
+
+            const scale = Math.min(60 / frame.canvas.width, 60 / frame.canvas.height);
+            const w = frame.canvas.width * scale;
+            const h = frame.canvas.height * scale;
+            ctx.drawImage(frame.canvas, (64 - w) / 2, (64 - h) / 2, w, h);
+
+            previewFrame++;
+        }
+
+        function exportSelectedFrames() {
+            if (selectedFrames.size === 0) {
+                alert('Seleziona almeno un frame da esportare');
+                return;
+            }
+
+            const bgColor = hexToRgb(document.getElementById('bgColor').value);
+            const tolerance = parseInt(document.getElementById('tolerance').value) || 30;
+
+            const sortedSelected = Array.from(selectedFrames).sort((a, b) => a - b);
+            sortedSelected.forEach((idx, i) => {
+                setTimeout(() => {
+                    const canvas = extractFrameCanvas(frames[idx], bgColor, tolerance);
+                    const link = document.createElement('a');
+                    link.download = `frame_${idx}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                }, i * 150);
+            });
+
+            document.getElementById('status').textContent = `Esportati ${sortedSelected.length} frame`;
+            document.getElementById('status').className = 'status success';
+        }
+
+        function exportAllFrames() {
+            if (frames.length === 0) {
+                alert('Nessun frame rilevato');
+                return;
+            }
+
+            const bgColor = hexToRgb(document.getElementById('bgColor').value);
+            const tolerance = parseInt(document.getElementById('tolerance').value) || 30;
+
+            frames.forEach((frame, i) => {
+                setTimeout(() => {
+                    const canvas = extractFrameCanvas(frame, bgColor, tolerance);
+                    const link = document.createElement('a');
+                    link.download = `frame_${i}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                }, i * 150);
+            });
+
+            document.getElementById('status').textContent = `Esportati ${frames.length} frame`;
+            document.getElementById('status').className = 'status success';
+        }
+
+        function exportAll() {
+            const bgColor = hexToRgb(document.getElementById('bgColor').value);
+            const tolerance = parseInt(document.getElementById('tolerance').value) || 30;
+
+            // Export each animation's frames
+            Object.entries(animations).forEach(([name, frameList]) => {
+                frameList.forEach((f, i) => {
+                    const link = document.createElement('a');
+                    link.download = `${name}_${i}.png`;
+                    link.href = f.canvas.toDataURL('image/png');
+                    link.click();
+                });
+            });
+
+            // Also export JSON
+            exportJSON();
+        }
+
+        function exportJSON() {
+            const data = {
+                animations: {}
+            };
+
+            Object.entries(animations).forEach(([name, frameList]) => {
+                data.animations[name] = frameList.map((f, i) => ({
+                    file: `${name}_${i}.png`,
+                    width: f.canvas.width,
+                    height: f.canvas.height,
+                    originalFrame: f.frameIdx
+                }));
+            });
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.download = 'sprites.json';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+        }
+
+        // Handle zoom change
+        document.getElementById('zoom').addEventListener('change', () => {
+            drawSource();
+            renderFrameOverlays();
+        });
+    </script>
+</body>
+</html>

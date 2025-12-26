@@ -54,17 +54,17 @@ const Game = {
         // Disabilita antialiasing per pixel art
         this.ctx.imageSmoothingEnabled = false;
 
-        // Genera sprites
-        Sprites.generateAll();
+        // Genera sprites (async per caricare sprite sheet)
+        Sprites.generateAll().then(() => {
+            // Inizializza fiocchi di neve per schermata titolo
+            this.initTitleSnowflakes();
 
-        // Inizializza fiocchi di neve per schermata titolo
-        this.initTitleSnowflakes();
+            // Avvia game loop
+            this.lastTime = performance.now();
+            requestAnimationFrame((time) => this.loop(time));
 
-        // Avvia game loop
-        this.lastTime = performance.now();
-        requestAnimationFrame((time) => this.loop(time));
-
-        Debug.log('Game initialized');
+            Debug.log('Game initialized');
+        });
     },
 
     /**

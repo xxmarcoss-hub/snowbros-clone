@@ -6,10 +6,17 @@ const Sprites = {
     // Cache degli sprite generati
     cache: {},
 
+    // Sprite sheet caricate
+    sheets: {},
+
     /**
      * Genera tutti gli sprite
      */
-    generateAll() {
+    async generateAll() {
+        // Carica sprite sheet
+        await this.loadSpriteSheets();
+
+        // Genera sprite dai sheet o proceduralmente
         this.generatePlayers();
         this.generateEnemies();
         this.generateSnow();
@@ -21,6 +28,67 @@ const Sprites = {
         this.generateHUD();
 
         Debug.log('All sprites generated');
+    },
+
+    /**
+     * Carica le sprite sheet da file
+     */
+    async loadSpriteSheets() {
+        const sheetsToLoad = [
+            { name: 'nick', path: 'assets/images/snowbros_nick.png' }
+        ];
+
+        for (const sheet of sheetsToLoad) {
+            try {
+                const img = new Image();
+                img.src = sheet.path;
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = () => {
+                        Debug.log(`Sprite sheet ${sheet.name} non trovata, uso fallback procedurale`);
+                        resolve();
+                    };
+                });
+                if (img.complete && img.naturalWidth > 0) {
+                    this.sheets[sheet.name] = img;
+                    Debug.log(`Sprite sheet ${sheet.name} caricata`);
+                }
+            } catch (e) {
+                Debug.log(`Errore caricamento ${sheet.name}: ${e}`);
+            }
+        }
+    },
+
+    /**
+     * Ritaglia un frame da una sprite sheet e rimuove il background
+     */
+    extractFrame(sheetName, x, y, width, height) {
+        const sheet = this.sheets[sheetName];
+        if (!sheet) return null;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(sheet, x, y, width, height, 0, 0, width, height);
+
+        // Rimuovi background verde (colore ~#98D898 o simile)
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Se è verde chiaro (background), rendi trasparente
+            if (g > 180 && g > r + 30 && g > b + 30) {
+                data[i + 3] = 0; // alpha = 0
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        return canvas;
     },
 
     /**
@@ -73,30 +141,126 @@ const Sprites = {
     // ===========================================
 
     generatePlayers() {
-        // Palette Nick (blu) - colori estratti dallo sprite originale
-        const nickPalette = {
-            1: '#3050a0', // blu scuro (contorno/ombra)
-            2: '#5080d0', // blu medio (corpo)
-            3: '#70a0e8', // blu chiaro (highlight)
-            4: '#ffffff', // bianco (occhi)
-            5: '#000000', // nero (pupille)
-            6: '#e06030', // arancione (bocca/naso)
-            7: '#f0a070'  // arancione chiaro
-        };
+        // Prova a caricare da sprite sheet, altrimenti usa fallback procedurale
+        if (this.sheets['nick']) {
+            this.generatePlayersFromSheet();
+            return;
+        }
 
-        // Palette Tom (verde) - stessa struttura, colori verdi
-        const tomPalette = {
-            1: '#207830', // verde scuro
-            2: '#40a050', // verde medio
-            3: '#60c870', // verde chiaro
+        // Fallback procedurale se sprite sheet non disponibile
+        this.generatePlayersProcedural();
+    },
+
+    /**
+     * Genera sprite giocatori dalla sprite sheet originale
+     */
+    generatePlayersFromSheet() {
+        // Coordinate frame nella sprite sheet snowbros_nick.png
+        // Riga 7 (y≈144): sprite 24x24 più definiti per il gioco
+        // Riga 1 (y=0): frame walk piccoli 16x24
+
+        // Usa sprite dalla riga 7 (in basso) - sono 24x24
+        const bigW = 24;
+        const bigH = 24;
+        const row7Y = 152;
+
+        // Estrai frame dalla riga 7
+        this.cache['nick_idle'] = this.extractFrame('nick', 0, row7Y, bigW, bigH);
+        this.cache['nick_walk1'] = this.extractFrame('nick', 24, row7Y, bigW, bigH);
+        this.cache['nick_walk2'] = this.extractFrame('nick', 48, row7Y, bigW, bigH);
+        this.cache['nick_jump'] = this.extractFrame('nick', 72, row7Y, bigW, bigH);
+        this.cache['nick_throw'] = this.extractFrame('nick', 96, row7Y, bigW, bigH);
+
+        // Crea versioni flippate
+        if (this.cache['nick_idle']) {
+            this.cache['nick_idle_left'] = this.flipHorizontal(this.cache['nick_idle']);
+        }
+        if (this.cache['nick_walk1']) {
+            this.cache['nick_walk1_left'] = this.flipHorizontal(this.cache['nick_walk1']);
+        }
+        if (this.cache['nick_walk2']) {
+            this.cache['nick_walk2_left'] = this.flipHorizontal(this.cache['nick_walk2']);
+        }
+        if (this.cache['nick_jump']) {
+            this.cache['nick_jump_left'] = this.flipHorizontal(this.cache['nick_jump']);
+        }
+        if (this.cache['nick_throw']) {
+            this.cache['nick_throw_left'] = this.flipHorizontal(this.cache['nick_throw']);
+        }
+
+        // Per Tom, usa stessi frame con filtro colore verde (o genera proceduralmente)
+        this.generateTomFromNick();
+
+        Debug.log('Player sprites caricati da sprite sheet');
+    },
+
+    /**
+     * Genera Tom partendo dagli sprite di Nick con filtro colore
+     */
+    generateTomFromNick() {
+        const nickFrames = ['idle', 'walk1', 'walk2', 'jump', 'throw'];
+
+        for (const frame of nickFrames) {
+            const nickSprite = this.cache[`nick_${frame}`];
+            if (nickSprite) {
+                // Crea canvas per Tom
+                const canvas = document.createElement('canvas');
+                canvas.width = nickSprite.width;
+                canvas.height = nickSprite.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(nickSprite, 0, 0);
+
+                // Applica filtro colore: blu -> verde
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+
+                    // Se è blu (b > r e b > g), converti in verde
+                    if (b > r + 20 && b > g) {
+                        data[i] = Math.floor(r * 0.5);      // R ridotto
+                        data[i + 1] = Math.floor(b * 0.9);  // G prende valore di B
+                        data[i + 2] = Math.floor(g * 0.5);  // B ridotto
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+                this.cache[`tom_${frame}`] = canvas;
+                this.cache[`tom_${frame}_left`] = this.flipHorizontal(canvas);
+            }
+        }
+    },
+
+    /**
+     * Fallback: genera sprite proceduralmente
+     */
+    generatePlayersProcedural() {
+        // Palette Nick (blu)
+        const nickPalette = {
+            1: '#3050a0',
+            2: '#5080d0',
+            3: '#70a0e8',
             4: '#ffffff',
             5: '#000000',
             6: '#e06030',
             7: '#f0a070'
         };
 
-        // Frame idle (16x16) - Fedele allo sprite originale
-        // Nick: corpo rotondo blu, occhi grandi, bocca arancione
+        // Palette Tom (verde)
+        const tomPalette = {
+            1: '#207830',
+            2: '#40a050',
+            3: '#60c870',
+            4: '#ffffff',
+            5: '#000000',
+            6: '#e06030',
+            7: '#f0a070'
+        };
+
+        // Frame idle (16x16)
         const playerIdle = [
             [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
             [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
@@ -116,7 +280,6 @@ const Sprites = {
             [0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0]
         ];
 
-        // Frame walk 1 - gamba destra avanti
         const playerWalk1 = [
             [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
             [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
@@ -136,7 +299,6 @@ const Sprites = {
             [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0]
         ];
 
-        // Frame walk 2 - gamba sinistra avanti
         const playerWalk2 = [
             [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
             [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
@@ -156,7 +318,6 @@ const Sprites = {
             [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0]
         ];
 
-        // Frame jump - in aria
         const playerJump = [
             [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
             [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
@@ -176,7 +337,6 @@ const Sprites = {
             [0,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0]
         ];
 
-        // Frame throw - lancia neve
         const playerThrow = [
             [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
             [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
