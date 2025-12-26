@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Sprite Extractor - Auto Detection</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -16,9 +17,38 @@
         .subtitle { color: #888; margin-bottom: 20px; }
 
         .main-container {
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: 20px;
+            display: flex;
+            gap: 0;
+            height: calc(100vh - 150px);
+        }
+        .left-panel {
+            flex: 1;
+            min-width: 200px;
+            overflow: auto;
+        }
+        .resizer {
+            width: 8px;
+            background: #3a3a5c;
+            cursor: col-resize;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .resizer:hover, .resizer.dragging {
+            background: #0ff;
+        }
+        .resizer::after {
+            content: '⋮';
+            color: #888;
+        }
+        .right-panel {
+            width: 320px;
+            min-width: 250px;
+            max-width: 600px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         .panel {
@@ -238,8 +268,8 @@
     </div>
 
     <div class="main-container">
-        <div>
-            <div class="panel">
+        <div class="left-panel">
+            <div class="panel" style="height:100%;">
                 <div id="status" class="status info">Caricamento sprite sheet...</div>
                 <div id="sourceContainer">
                     <canvas id="source"></canvas>
@@ -247,7 +277,9 @@
             </div>
         </div>
 
-        <div>
+        <div class="resizer" id="resizer"></div>
+
+        <div class="right-panel" id="rightPanel">
             <div class="panel">
                 <h3>Frame Rilevati <span id="selectionCount" style="color:#888; font-weight:normal; font-size:14px;"></span></h3>
                 <div style="margin-bottom:10px; display:flex; gap:8px;">
@@ -272,16 +304,24 @@
 
             <div class="panel preview-container">
                 <h3>Preview Animazione</h3>
-                <canvas id="animationPreview" width="64" height="64"></canvas>
-                <div style="margin-top:10px">
+                <canvas id="animationPreview" width="96" height="96"></canvas>
+                <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap;">
+                    <button id="playPauseBtn" onclick="togglePreview()" class="primary" style="font-size:18px; padding:8px 16px;">▶</button>
+                    <button onclick="stepBackward()" title="Frame precedente">◀◀</button>
+                    <button onclick="stepForward()" title="Frame successivo">▶▶</button>
                     <label>FPS: <input type="number" id="previewFps" value="8" min="1" max="30" style="width:50px" onchange="updatePreviewSpeed()"></label>
                 </div>
+                <div id="frameCounter" style="margin-top:8px; color:#888; font-size:12px;">-</div>
             </div>
 
             <div class="panel">
                 <h3>Esporta</h3>
-                <button class="success" onclick="exportAll()">📦 Esporta Tutto</button>
-                <button onclick="exportJSON()">📄 Esporta JSON</button>
+                <p style="font-size:12px; color:#888; margin-bottom:10px;">I file vengono scaricati nella cartella Downloads. Spostali poi in assets/images/</p>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <button class="success" onclick="exportAllAsZip()">📦 Scarica ZIP (PNG + JSON)</button>
+                    <button onclick="exportAll()">📥 Scarica PNG singoli</button>
+                    <button onclick="exportJSON()">📄 Solo JSON</button>
+                </div>
             </div>
         </div>
     </div>
@@ -644,6 +684,7 @@
                 const header = document.createElement('h4');
                 const nameInput = document.createElement('input');
                 nameInput.value = name;
+                nameInput.style.cssText = 'font-size:16px; font-weight:bold; padding:8px 12px; width:100%; margin-bottom:8px;';
                 nameInput.onchange = () => renameAnimation(name, nameInput.value);
                 header.appendChild(nameInput);
 
@@ -704,6 +745,12 @@
                     dupFrameBtn.style.cssText = 'padding:2px 6px; font-size:10px;';
                     dupFrameBtn.onclick = (e) => { e.stopPropagation(); duplicateFrame(name, i); };
 
+                    const mirrorFrameBtn = document.createElement('button');
+                    mirrorFrameBtn.textContent = '↔';
+                    mirrorFrameBtn.title = 'Specchia frame';
+                    mirrorFrameBtn.style.cssText = 'padding:2px 6px; font-size:10px;';
+                    mirrorFrameBtn.onclick = (e) => { e.stopPropagation(); mirrorFrame(name, i); };
+
                     const delFrameBtn = document.createElement('button');
                     delFrameBtn.textContent = 'x';
                     delFrameBtn.title = 'Elimina frame';
@@ -712,6 +759,7 @@
                     delFrameBtn.onclick = (e) => { e.stopPropagation(); frameList.splice(i, 1); renderAnimations(); };
 
                     frameBtns.appendChild(dupFrameBtn);
+                    frameBtns.appendChild(mirrorFrameBtn);
                     frameBtns.appendChild(delFrameBtn);
 
                     frameContainer.appendChild(canvas);
@@ -790,6 +838,20 @@
             renderAnimations();
         }
 
+        function mirrorFrame(animName, index) {
+            const f = animations[animName][index];
+            const mirrored = document.createElement('canvas');
+            mirrored.width = f.canvas.width;
+            mirrored.height = f.canvas.height;
+            const ctx = mirrored.getContext('2d');
+            ctx.translate(mirrored.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(f.canvas, 0, 0);
+            f.canvas = mirrored;
+            renderAnimations();
+            startPreview();
+        }
+
         function moveFrame(animName, fromIndex, toIndex) {
             const frameList = animations[animName];
             const [moved] = frameList.splice(fromIndex, 1);
@@ -814,26 +876,76 @@
             renderAnimations();
         }
 
+        let isPlaying = false;
+
         function startPreview() {
             if (previewInterval) clearInterval(previewInterval);
-            previewFrame = 0;
+            isPlaying = true;
+            updatePlayPauseBtn();
 
             const fps = parseInt(document.getElementById('previewFps').value) || 8;
             previewInterval = setInterval(renderPreview, 1000 / fps);
         }
 
+        function stopPreview() {
+            if (previewInterval) clearInterval(previewInterval);
+            previewInterval = null;
+            isPlaying = false;
+            updatePlayPauseBtn();
+        }
+
+        function togglePreview() {
+            if (isPlaying) {
+                stopPreview();
+            } else {
+                startPreview();
+            }
+        }
+
+        function updatePlayPauseBtn() {
+            const btn = document.getElementById('playPauseBtn');
+            btn.textContent = isPlaying ? '⏸' : '▶';
+        }
+
+        function stepForward() {
+            stopPreview();
+            if (currentAnimation && animations[currentAnimation] && animations[currentAnimation].length > 0) {
+                previewFrame = (previewFrame + 1) % animations[currentAnimation].length;
+                renderPreviewFrame();
+            }
+        }
+
+        function stepBackward() {
+            stopPreview();
+            if (currentAnimation && animations[currentAnimation] && animations[currentAnimation].length > 0) {
+                previewFrame = (previewFrame - 1 + animations[currentAnimation].length) % animations[currentAnimation].length;
+                renderPreviewFrame();
+            }
+        }
+
         function updatePreviewSpeed() {
-            startPreview();
+            if (isPlaying) {
+                startPreview();
+            }
         }
 
         function renderPreview() {
+            if (currentAnimation && animations[currentAnimation] && animations[currentAnimation].length > 0) {
+                previewFrame = (previewFrame + 1) % animations[currentAnimation].length;
+            }
+            renderPreviewFrame();
+        }
+
+        function renderPreviewFrame() {
             const canvas = document.getElementById('animationPreview');
             const ctx = canvas.getContext('2d');
             ctx.imageSmoothingEnabled = false;
 
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, 96, 96);
+
             if (!currentAnimation || !animations[currentAnimation] || animations[currentAnimation].length === 0) {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, 64, 64);
+                document.getElementById('frameCounter').textContent = '-';
                 return;
             }
 
@@ -841,15 +953,12 @@
             previewFrame = previewFrame % frameList.length;
             const frame = frameList[previewFrame];
 
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, 64, 64);
-
-            const scale = Math.min(60 / frame.canvas.width, 60 / frame.canvas.height);
+            const scale = Math.min(90 / frame.canvas.width, 90 / frame.canvas.height);
             const w = frame.canvas.width * scale;
             const h = frame.canvas.height * scale;
-            ctx.drawImage(frame.canvas, (64 - w) / 2, (64 - h) / 2, w, h);
+            ctx.drawImage(frame.canvas, (96 - w) / 2, (96 - h) / 2, w, h);
 
-            previewFrame++;
+            document.getElementById('frameCounter').textContent = `Frame ${previewFrame + 1} / ${frameList.length}`;
         }
 
         function exportSelectedFrames() {
@@ -938,10 +1047,96 @@
             link.click();
         }
 
+        async function exportAllAsZip() {
+            if (Object.keys(animations).length === 0) {
+                alert('Crea almeno un\'animazione prima di esportare');
+                return;
+            }
+
+            const zip = new JSZip();
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = 'Creazione ZIP in corso...';
+            statusEl.className = 'status info';
+
+            // Add all animation frames as PNG
+            const promises = [];
+            Object.entries(animations).forEach(([name, frameList]) => {
+                frameList.forEach((f, i) => {
+                    const filename = `${name}_${i}.png`;
+                    // Convert canvas to blob
+                    const promise = new Promise((resolve) => {
+                        f.canvas.toBlob((blob) => {
+                            zip.file(filename, blob);
+                            resolve();
+                        }, 'image/png');
+                    });
+                    promises.push(promise);
+                });
+            });
+
+            // Wait for all images to be added
+            await Promise.all(promises);
+
+            // Create sprites.json
+            const data = {
+                animations: {}
+            };
+            Object.entries(animations).forEach(([name, frameList]) => {
+                data.animations[name] = frameList.map((f, i) => ({
+                    file: `${name}_${i}.png`,
+                    width: f.canvas.width,
+                    height: f.canvas.height,
+                    originalFrame: f.frameIdx
+                }));
+            });
+            zip.file('sprites.json', JSON.stringify(data, null, 2));
+
+            // Generate and download ZIP
+            const content = await zip.generateAsync({ type: 'blob' });
+            const link = document.createElement('a');
+            link.download = 'sprites.zip';
+            link.href = URL.createObjectURL(content);
+            link.click();
+
+            const totalFrames = Object.values(animations).reduce((sum, arr) => sum + arr.length, 0);
+            statusEl.textContent = `ZIP creato: ${totalFrames} frame + sprites.json`;
+            statusEl.className = 'status success';
+        }
+
         // Handle zoom change
         document.getElementById('zoom').addEventListener('change', () => {
             drawSource();
             renderFrameOverlays();
+        });
+
+        // Resizer functionality
+        const resizer = document.getElementById('resizer');
+        const rightPanel = document.getElementById('rightPanel');
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const containerRect = document.querySelector('.main-container').getBoundingClientRect();
+            const newWidth = containerRect.right - e.clientX;
+            if (newWidth >= 250 && newWidth <= 600) {
+                rightPanel.style.width = newWidth + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
         });
     </script>
 </body>
