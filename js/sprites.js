@@ -30,6 +30,9 @@ const Sprites = {
         Debug.log('All sprites generated');
     },
 
+    // Animazioni caricate da sprites.json
+    animations: {},
+
     /**
      * Carica le sprite sheet da file
      */
@@ -56,6 +59,56 @@ const Sprites = {
             } catch (e) {
                 Debug.log(`Errore caricamento ${sheet.name}: ${e}`);
             }
+        }
+
+        // Carica sprite PNG estratti
+        await this.loadExtractedSprites();
+    },
+
+    /**
+     * Carica gli sprite PNG estratti da assets/sprites/sprites/
+     */
+    async loadExtractedSprites() {
+        try {
+            // Carica sprites.json
+            const response = await fetch('assets/sprites/sprites/sprites.json');
+            if (!response.ok) {
+                Debug.log('sprites.json non trovato, uso fallback procedurale');
+                return;
+            }
+
+            const data = await response.json();
+            this.animations = data.animations;
+
+            // Carica tutte le immagini PNG per ogni animazione
+            for (const [animName, frames] of Object.entries(this.animations)) {
+                for (let i = 0; i < frames.length; i++) {
+                    const frame = frames[i];
+                    const img = new Image();
+                    img.src = `assets/sprites/sprites/${frame.file}`;
+
+                    await new Promise((resolve) => {
+                        img.onload = resolve;
+                        img.onerror = () => {
+                            Debug.log(`Sprite ${frame.file} non trovato`);
+                            resolve();
+                        };
+                    });
+
+                    if (img.complete && img.naturalWidth > 0) {
+                        // Salva l'immagine nella cache con nome standardizzato
+                        const spriteName = `nick_${animName}_${i}`;
+                        this.cache[spriteName] = img;
+
+                        // Crea versione flippata
+                        this.cache[`${spriteName}_left`] = this.flipHorizontal(img);
+                    }
+                }
+            }
+
+            Debug.log('Sprite PNG estratti caricati');
+        } catch (e) {
+            Debug.log(`Errore caricamento sprite estratti: ${e}`);
         }
     },
 
@@ -141,14 +194,139 @@ const Sprites = {
     // ===========================================
 
     generatePlayers() {
-        // Prova a caricare da sprite sheet, altrimenti usa fallback procedurale
+        // Priorità 1: Usa sprite PNG estratti se disponibili
+        if (this.animations && Object.keys(this.animations).length > 0) {
+            this.generatePlayersFromExtracted();
+            return;
+        }
+
+        // Priorità 2: Prova a caricare da sprite sheet
         if (this.sheets['nick']) {
             this.generatePlayersFromSheet();
             return;
         }
 
-        // Fallback procedurale se sprite sheet non disponibile
+        // Fallback procedurale se nient'altro è disponibile
         this.generatePlayersProcedural();
+    },
+
+    /**
+     * Genera sprite giocatori dagli sprite PNG estratti
+     */
+    generatePlayersFromExtracted() {
+        // Gli sprite originali 'cammina_sinistra' guardano a sinistra
+        // Per 'idle' gli sprite guardano a destra
+        // Dobbiamo creare alias per compatibilità con il sistema esistente
+
+        // Idle: usa idle_0 (guarda a destra nell'originale)
+        if (this.cache['nick_idle_0']) {
+            this.cache['nick_idle'] = this.cache['nick_idle_0'];
+            this.cache['nick_idle_left'] = this.cache['nick_idle_0_left'];
+        }
+
+        // Walk: usa cammina_sinistra (gli sprite guardano a sinistra)
+        // Quindi la versione base guarda a sinistra, la flippata guarda a destra
+        if (this.cache['nick_cammina_sinistra_0']) {
+            // walk1: frame 0 della camminata
+            this.cache['nick_walk1'] = this.cache['nick_cammina_sinistra_0_left']; // flippato per guardare a destra
+            this.cache['nick_walk1_left'] = this.cache['nick_cammina_sinistra_0'];  // originale guarda a sinistra
+        }
+        if (this.cache['nick_cammina_sinistra_1']) {
+            // walk2: frame 1 della camminata
+            this.cache['nick_walk2'] = this.cache['nick_cammina_sinistra_1_left'];
+            this.cache['nick_walk2_left'] = this.cache['nick_cammina_sinistra_1'];
+        }
+        if (this.cache['nick_cammina_sinistra_2']) {
+            // walk3: frame 2 della camminata (nuovo)
+            this.cache['nick_walk3'] = this.cache['nick_cammina_sinistra_2_left'];
+            this.cache['nick_walk3_left'] = this.cache['nick_cammina_sinistra_2'];
+        }
+
+        // Jump e Throw: usa idle come placeholder
+        if (this.cache['nick_idle']) {
+            this.cache['nick_jump'] = this.cache['nick_idle'];
+            this.cache['nick_jump_left'] = this.cache['nick_idle_left'];
+            this.cache['nick_throw'] = this.cache['nick_idle'];
+            this.cache['nick_throw_left'] = this.cache['nick_idle_left'];
+        }
+
+        // Death: copia riferimenti per accesso facile
+        for (let i = 0; i < 6; i++) {
+            if (this.cache[`nick_muori_${i}`]) {
+                this.cache[`nick_death_${i}`] = this.cache[`nick_muori_${i}`];
+                this.cache[`nick_death_${i}_left`] = this.cache[`nick_muori_${i}_left`];
+            }
+        }
+
+        // Spawn: copia riferimenti
+        for (let i = 0; i < 5; i++) {
+            if (this.cache[`nick_spawn_${i}`]) {
+                // Gli sprite spawn sono già disponibili con il nome corretto
+            }
+        }
+
+        // Genera Tom dagli sprite di Nick con filtro colore
+        this.generateTomFromExtracted();
+
+        Debug.log('Player sprites generati da PNG estratti');
+    },
+
+    /**
+     * Genera Tom partendo dagli sprite estratti di Nick con filtro colore
+     */
+    generateTomFromExtracted() {
+        const framesToConvert = [
+            'idle', 'idle_left',
+            'walk1', 'walk1_left', 'walk2', 'walk2_left', 'walk3', 'walk3_left',
+            'jump', 'jump_left', 'throw', 'throw_left'
+        ];
+
+        // Aggiungi frame death
+        for (let i = 0; i < 6; i++) {
+            framesToConvert.push(`death_${i}`, `death_${i}_left`);
+        }
+
+        // Aggiungi frame spawn
+        for (let i = 0; i < 5; i++) {
+            framesToConvert.push(`spawn_${i}`, `spawn_${i}_left`);
+        }
+
+        for (const frame of framesToConvert) {
+            const nickSprite = this.cache[`nick_${frame}`];
+            if (nickSprite) {
+                this.cache[`tom_${frame}`] = this.convertNickToTom(nickSprite);
+            }
+        }
+    },
+
+    /**
+     * Converte uno sprite di Nick in Tom (blu -> verde)
+     */
+    convertNickToTom(sprite) {
+        const canvas = document.createElement('canvas');
+        canvas.width = sprite.width;
+        canvas.height = sprite.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(sprite, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Se è blu (b > r e b > g), converti in verde
+            if (b > r + 20 && b > g) {
+                data[i] = Math.floor(r * 0.5);      // R ridotto
+                data[i + 1] = Math.floor(b * 0.9);  // G prende valore di B
+                data[i + 2] = Math.floor(g * 0.5);  // B ridotto
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        return canvas;
     },
 
     /**

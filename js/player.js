@@ -31,6 +31,11 @@ class Player {
         this.deathTimer = 0;
         this.deathAnimFrame = 0;
 
+        // Stato spawn
+        this.spawning = false;
+        this.spawnTimer = 0;
+        this.spawnAnimFrame = 0;
+
         // Direzione
         this.facing = 1; // 1 = destra, -1 = sinistra
 
@@ -71,6 +76,12 @@ class Player {
     // ===========================================
 
     update(deltaTime) {
+        // Gestione animazione spawn
+        if (this.spawning) {
+            this.updateSpawn(deltaTime);
+            return;
+        }
+
         // Gestione animazione morte
         if (this.dying) {
             this.updateDeath(deltaTime);
@@ -331,13 +342,39 @@ class Player {
         // Aggiorna timer animazione
         this.deathTimer -= frameMs;
 
-        // Frame animazione (lampeggio)
-        this.deathAnimFrame = Math.floor(this.deathTimer / 100) % 2;
+        // Calcola frame animazione morte (6 frame in ~1 secondo)
+        const totalFrames = 6;
+        const frameTime = 1000 / totalFrames;
+        this.deathAnimFrame = Math.min(
+            totalFrames - 1,
+            Math.floor((1000 - this.deathTimer) / frameTime)
+        );
 
         // Fine animazione morte
         if (this.deathTimer <= 0) {
             this.dying = false;
             this.alive = false;
+        }
+    }
+
+    updateSpawn(deltaTime) {
+        const dt = deltaTime;
+        const frameMs = dt * FRAME_TIME;
+
+        // Aggiorna timer animazione
+        this.spawnTimer -= frameMs;
+
+        // Calcola frame animazione spawn (5 frame in ~750ms)
+        const totalFrames = 5;
+        const frameTime = 750 / totalFrames;
+        this.spawnAnimFrame = Math.min(
+            totalFrames - 1,
+            Math.floor((750 - this.spawnTimer) / frameTime)
+        );
+
+        // Fine animazione spawn
+        if (this.spawnTimer <= 0) {
+            this.spawning = false;
         }
     }
 
@@ -350,6 +387,20 @@ class Player {
         this.invincible = true;
         this.invincibleTimer = INVINCIBILITY_TIME;
         this.grounded = false;
+
+        // Inizia animazione spawn
+        this.spawning = true;
+        this.spawnTimer = 750;
+        this.spawnAnimFrame = 0;
+    }
+
+    /**
+     * Inizializza il player con animazione di spawn (per inizio livello)
+     */
+    startSpawnAnimation() {
+        this.spawning = true;
+        this.spawnTimer = 750;
+        this.spawnAnimFrame = 0;
     }
 
     // ===========================================
@@ -399,9 +450,9 @@ class Player {
             this.animState = 'idle';
         }
 
-        // Avanza frame walk
+        // Avanza frame walk (3 frame)
         if (this.animState === 'walk' && this.animTimer >= this.animSpeed) {
-            this.animFrame = (this.animFrame + 1) % 2;
+            this.animFrame = (this.animFrame + 1) % 3;
             this.animTimer = 0;
         }
     }
@@ -415,7 +466,8 @@ class Player {
                 frame = 'idle';
                 break;
             case 'walk':
-                frame = this.animFrame === 0 ? 'walk1' : 'walk2';
+                // 3 frame di camminata
+                frame = `walk${this.animFrame + 1}`;
                 break;
             case 'jump':
                 frame = 'jump';
@@ -430,40 +482,58 @@ class Player {
         return `${this.name}_${frame}${dir}`;
     }
 
+    /**
+     * Ottiene il nome dello sprite per lo stato attuale (inclusi spawn/death)
+     */
+    getCurrentSpriteName() {
+        if (this.spawning) {
+            return `${this.name}_spawn_${this.spawnAnimFrame}`;
+        }
+        if (this.dying) {
+            const dir = this.facing === -1 ? '_left' : '';
+            return `${this.name}_death_${this.deathAnimFrame}${dir}`;
+        }
+        return this.getSpriteName();
+    }
+
     // ===========================================
     // RENDER
     // ===========================================
 
     render(ctx) {
-        if (!this.alive && !this.dying) return;
+        if (!this.alive && !this.dying && !this.spawning) return;
 
-        // Non renderizza durante blink invincibilità
-        if (this.invincible && this.invincibleBlink) return;
+        // Non renderizza durante blink invincibilità (ma non durante spawn)
+        if (this.invincible && this.invincibleBlink && !this.spawning) return;
 
-        // Non renderizza durante frame dispari dell'animazione morte
-        if (this.dying && this.deathAnimFrame === 1) return;
-
-        const sprite = Sprites.get(this.getSpriteName());
+        const spriteName = this.getCurrentSpriteName();
+        const sprite = Sprites.get(spriteName);
         const drawX = Math.floor(this.x);
         const drawY = Math.floor(this.y);
 
-        // Durante la morte, ruota lo sprite
-        if (this.dying) {
-            ctx.save();
-            ctx.translate(drawX + this.width / 2, drawY + this.height / 2);
-            ctx.rotate((1 - this.deathTimer / 1000) * Math.PI * 2);
-            ctx.translate(-this.width / 2, -this.height / 2);
+        // Durante la morte con i nuovi sprite animati
+        if (this.dying && sprite) {
+            // Centra lo sprite rispetto alla hitbox (gli sprite death hanno dimensioni variabili)
+            const offsetX = (this.width - sprite.width) / 2;
+            const offsetY = this.height - sprite.height;
 
-            if (sprite) {
-                ctx.drawImage(sprite, 0, 0, this.width, this.height);
-            } else {
-                ctx.fillStyle = this.playerNum === 1 ? Colors.NICK_BLUE : Colors.TOM_GREEN;
-                ctx.fillRect(0, 0, this.width, this.height);
-            }
+            ctx.drawImage(sprite, drawX + offsetX, drawY + offsetY);
+        }
+        // Durante lo spawn con i nuovi sprite animati
+        else if (this.spawning && sprite) {
+            // Centra lo sprite spawn rispetto alla hitbox (dimensioni molto variabili)
+            const offsetX = (this.width - sprite.width) / 2;
+            const offsetY = this.height - sprite.height;
 
-            ctx.restore();
-        } else if (sprite) {
-            ctx.drawImage(sprite, drawX, drawY, this.width, this.height);
+            ctx.drawImage(sprite, drawX + offsetX, drawY + offsetY);
+        }
+        // Rendering normale
+        else if (sprite) {
+            // Per sprite normali, centra orizzontalmente e allinea in basso
+            const offsetX = (this.width - sprite.width) / 2;
+            const offsetY = this.height - sprite.height;
+
+            ctx.drawImage(sprite, drawX + offsetX, drawY + offsetY);
         } else {
             // Fallback: rettangolo colorato
             ctx.fillStyle = this.playerNum === 1 ? Colors.NICK_BLUE : Colors.TOM_GREEN;
