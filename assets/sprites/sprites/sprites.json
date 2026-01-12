@@ -1,0 +1,102 @@
+{
+  "animations": {
+    "idle": [
+      {
+        "file": "idle_0.png",
+        "width": 21,
+        "height": 24,
+        "originalFrame": 0
+      }
+    ],
+    "cammina_sinistra": [
+      {
+        "file": "cammina_sinistra_0.png",
+        "width": 16,
+        "height": 23,
+        "originalFrame": 1
+      },
+      {
+        "file": "cammina_sinistra_1.png",
+        "width": 19,
+        "height": 24,
+        "originalFrame": 2
+      },
+      {
+        "file": "cammina_sinistra_2.png",
+        "width": 16,
+        "height": 24,
+        "originalFrame": 3
+      }
+    ],
+    "muori": [
+      {
+        "file": "muori_0.png",
+        "width": 29,
+        "height": 32,
+        "originalFrame": 41
+      },
+      {
+        "file": "muori_1.png",
+        "width": 30,
+        "height": 29,
+        "originalFrame": 42
+      },
+      {
+        "file": "muori_2.png",
+        "width": 28,
+        "height": 24,
+        "originalFrame": 43
+      },
+      {
+        "file": "muori_3.png",
+        "width": 30,
+        "height": 21,
+        "originalFrame": 44
+      },
+      {
+        "file": "muori_4.png",
+        "width": 32,
+        "height": 16,
+        "originalFrame": 45
+      },
+      {
+        "file": "muori_5.png",
+        "width": 12,
+        "height": 13,
+        "originalFrame": 46
+      }
+    ],
+    "spawn": [
+      {
+        "file": "spawn_0.png",
+        "width": 21,
+        "height": 24,
+        "originalFrame": 0
+      },
+      {
+        "file": "spawn_1.png",
+        "width": 20,
+        "height": 29,
+        "originalFrame": 4
+      },
+      {
+        "file": "spawn_2.png",
+        "width": 40,
+        "height": 38,
+        "originalFrame": 30
+      },
+      {
+        "file": "spawn_3.png",
+        "width": 48,
+        "height": 45,
+        "originalFrame": 31
+      },
+      {
+        "file": "spawn_4.png",
+        "width": 36,
+        "height": 40,
+        "originalFrame": 32
+      }
+    ]
+  }
+}

@@ -6,10 +6,17 @@ const Sprites = {
     // Cache degli sprite generati
     cache: {},
 
+    // Sprite sheet caricate
+    sheets: {},
+
     /**
      * Genera tutti gli sprite
      */
-    generateAll() {
+    async generateAll() {
+        // Carica sprite sheet
+        await this.loadSpriteSheets();
+
+        // Genera sprite dai sheet o proceduralmente
         this.generatePlayers();
         this.generateEnemies();
         this.generateSnow();
@@ -21,6 +28,120 @@ const Sprites = {
         this.generateHUD();
 
         Debug.log('All sprites generated');
+    },
+
+    // Animazioni caricate da sprites.json
+    animations: {},
+
+    /**
+     * Carica le sprite sheet da file
+     */
+    async loadSpriteSheets() {
+        const sheetsToLoad = [
+            { name: 'nick', path: 'assets/images/snowbros_nick.png' }
+        ];
+
+        for (const sheet of sheetsToLoad) {
+            try {
+                const img = new Image();
+                img.src = sheet.path;
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = () => {
+                        Debug.log(`Sprite sheet ${sheet.name} non trovata, uso fallback procedurale`);
+                        resolve();
+                    };
+                });
+                if (img.complete && img.naturalWidth > 0) {
+                    this.sheets[sheet.name] = img;
+                    Debug.log(`Sprite sheet ${sheet.name} caricata`);
+                }
+            } catch (e) {
+                Debug.log(`Errore caricamento ${sheet.name}: ${e}`);
+            }
+        }
+
+        // Carica sprite PNG estratti
+        await this.loadExtractedSprites();
+    },
+
+    /**
+     * Carica gli sprite PNG estratti da assets/sprites/sprites/
+     */
+    async loadExtractedSprites() {
+        try {
+            // Carica sprites.json
+            const response = await fetch('assets/sprites/sprites/sprites.json');
+            if (!response.ok) {
+                Debug.log('sprites.json non trovato, uso fallback procedurale');
+                return;
+            }
+
+            const data = await response.json();
+            this.animations = data.animations;
+
+            // Carica tutte le immagini PNG per ogni animazione
+            for (const [animName, frames] of Object.entries(this.animations)) {
+                for (let i = 0; i < frames.length; i++) {
+                    const frame = frames[i];
+                    const img = new Image();
+                    img.src = `assets/sprites/sprites/${frame.file}`;
+
+                    await new Promise((resolve) => {
+                        img.onload = resolve;
+                        img.onerror = () => {
+                            Debug.log(`Sprite ${frame.file} non trovato`);
+                            resolve();
+                        };
+                    });
+
+                    if (img.complete && img.naturalWidth > 0) {
+                        // Salva l'immagine nella cache con nome standardizzato
+                        const spriteName = `nick_${animName}_${i}`;
+                        this.cache[spriteName] = img;
+
+                        // Crea versione flippata
+                        this.cache[`${spriteName}_left`] = this.flipHorizontal(img);
+                    }
+                }
+            }
+
+            Debug.log('Sprite PNG estratti caricati');
+        } catch (e) {
+            Debug.log(`Errore caricamento sprite estratti: ${e}`);
+        }
+    },
+
+    /**
+     * Ritaglia un frame da una sprite sheet e rimuove il background
+     */
+    extractFrame(sheetName, x, y, width, height) {
+        const sheet = this.sheets[sheetName];
+        if (!sheet) return null;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(sheet, x, y, width, height, 0, 0, width, height);
+
+        // Rimuovi background verde (colore ~#98D898 o simile)
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Se è verde chiaro (background), rendi trasparente
+            if (g > 180 && g > r + 30 && g > b + 30) {
+                data[i + 3] = 0; // alpha = 0
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        return canvas;
     },
 
     /**
@@ -73,124 +194,344 @@ const Sprites = {
     // ===========================================
 
     generatePlayers() {
+        // Priorità 1: Usa sprite PNG estratti se disponibili
+        if (this.animations && Object.keys(this.animations).length > 0) {
+            this.generatePlayersFromExtracted();
+            return;
+        }
+
+        // Priorità 2: Prova a caricare da sprite sheet
+        if (this.sheets['nick']) {
+            this.generatePlayersFromSheet();
+            return;
+        }
+
+        // Fallback procedurale se nient'altro è disponibile
+        this.generatePlayersProcedural();
+    },
+
+    /**
+     * Genera sprite giocatori dagli sprite PNG estratti
+     */
+    generatePlayersFromExtracted() {
+        // Gli sprite originali 'cammina_sinistra' guardano a sinistra
+        // Per 'idle' gli sprite guardano a destra
+        // Dobbiamo creare alias per compatibilità con il sistema esistente
+
+        // Idle: usa idle_0 (guarda a destra nell'originale)
+        if (this.cache['nick_idle_0']) {
+            this.cache['nick_idle'] = this.cache['nick_idle_0'];
+            this.cache['nick_idle_left'] = this.cache['nick_idle_0_left'];
+        }
+
+        // Walk: usa cammina_sinistra (gli sprite guardano a sinistra)
+        // Quindi la versione base guarda a sinistra, la flippata guarda a destra
+        if (this.cache['nick_cammina_sinistra_0']) {
+            // walk1: frame 0 della camminata
+            this.cache['nick_walk1'] = this.cache['nick_cammina_sinistra_0_left']; // flippato per guardare a destra
+            this.cache['nick_walk1_left'] = this.cache['nick_cammina_sinistra_0'];  // originale guarda a sinistra
+        }
+        if (this.cache['nick_cammina_sinistra_1']) {
+            // walk2: frame 1 della camminata
+            this.cache['nick_walk2'] = this.cache['nick_cammina_sinistra_1_left'];
+            this.cache['nick_walk2_left'] = this.cache['nick_cammina_sinistra_1'];
+        }
+        if (this.cache['nick_cammina_sinistra_2']) {
+            // walk3: frame 2 della camminata (nuovo)
+            this.cache['nick_walk3'] = this.cache['nick_cammina_sinistra_2_left'];
+            this.cache['nick_walk3_left'] = this.cache['nick_cammina_sinistra_2'];
+        }
+
+        // Jump e Throw: usa idle come placeholder
+        if (this.cache['nick_idle']) {
+            this.cache['nick_jump'] = this.cache['nick_idle'];
+            this.cache['nick_jump_left'] = this.cache['nick_idle_left'];
+            this.cache['nick_throw'] = this.cache['nick_idle'];
+            this.cache['nick_throw_left'] = this.cache['nick_idle_left'];
+        }
+
+        // Death: copia riferimenti per accesso facile
+        for (let i = 0; i < 6; i++) {
+            if (this.cache[`nick_muori_${i}`]) {
+                this.cache[`nick_death_${i}`] = this.cache[`nick_muori_${i}`];
+                this.cache[`nick_death_${i}_left`] = this.cache[`nick_muori_${i}_left`];
+            }
+        }
+
+        // Spawn: copia riferimenti
+        for (let i = 0; i < 5; i++) {
+            if (this.cache[`nick_spawn_${i}`]) {
+                // Gli sprite spawn sono già disponibili con il nome corretto
+            }
+        }
+
+        // Genera Tom dagli sprite di Nick con filtro colore
+        this.generateTomFromExtracted();
+
+        Debug.log('Player sprites generati da PNG estratti');
+    },
+
+    /**
+     * Genera Tom partendo dagli sprite estratti di Nick con filtro colore
+     */
+    generateTomFromExtracted() {
+        const framesToConvert = [
+            'idle', 'idle_left',
+            'walk1', 'walk1_left', 'walk2', 'walk2_left', 'walk3', 'walk3_left',
+            'jump', 'jump_left', 'throw', 'throw_left'
+        ];
+
+        // Aggiungi frame death
+        for (let i = 0; i < 6; i++) {
+            framesToConvert.push(`death_${i}`, `death_${i}_left`);
+        }
+
+        // Aggiungi frame spawn
+        for (let i = 0; i < 5; i++) {
+            framesToConvert.push(`spawn_${i}`, `spawn_${i}_left`);
+        }
+
+        for (const frame of framesToConvert) {
+            const nickSprite = this.cache[`nick_${frame}`];
+            if (nickSprite) {
+                this.cache[`tom_${frame}`] = this.convertNickToTom(nickSprite);
+            }
+        }
+    },
+
+    /**
+     * Converte uno sprite di Nick in Tom (blu -> verde)
+     */
+    convertNickToTom(sprite) {
+        const canvas = document.createElement('canvas');
+        canvas.width = sprite.width;
+        canvas.height = sprite.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(sprite, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Se è blu (b > r e b > g), converti in verde
+            if (b > r + 20 && b > g) {
+                data[i] = Math.floor(r * 0.5);      // R ridotto
+                data[i + 1] = Math.floor(b * 0.9);  // G prende valore di B
+                data[i + 2] = Math.floor(g * 0.5);  // B ridotto
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        return canvas;
+    },
+
+    /**
+     * Genera sprite giocatori dalla sprite sheet originale
+     */
+    generatePlayersFromSheet() {
+        // Coordinate frame nella sprite sheet snowbros_nick.png
+        // Riga 7 (y≈144): sprite 24x24 più definiti per il gioco
+        // Riga 1 (y=0): frame walk piccoli 16x24
+
+        // Usa sprite dalla riga 7 (in basso) - sono 24x24
+        const bigW = 24;
+        const bigH = 24;
+        const row7Y = 152;
+
+        // Estrai frame dalla riga 7
+        this.cache['nick_idle'] = this.extractFrame('nick', 0, row7Y, bigW, bigH);
+        this.cache['nick_walk1'] = this.extractFrame('nick', 24, row7Y, bigW, bigH);
+        this.cache['nick_walk2'] = this.extractFrame('nick', 48, row7Y, bigW, bigH);
+        this.cache['nick_jump'] = this.extractFrame('nick', 72, row7Y, bigW, bigH);
+        this.cache['nick_throw'] = this.extractFrame('nick', 96, row7Y, bigW, bigH);
+
+        // Crea versioni flippate
+        if (this.cache['nick_idle']) {
+            this.cache['nick_idle_left'] = this.flipHorizontal(this.cache['nick_idle']);
+        }
+        if (this.cache['nick_walk1']) {
+            this.cache['nick_walk1_left'] = this.flipHorizontal(this.cache['nick_walk1']);
+        }
+        if (this.cache['nick_walk2']) {
+            this.cache['nick_walk2_left'] = this.flipHorizontal(this.cache['nick_walk2']);
+        }
+        if (this.cache['nick_jump']) {
+            this.cache['nick_jump_left'] = this.flipHorizontal(this.cache['nick_jump']);
+        }
+        if (this.cache['nick_throw']) {
+            this.cache['nick_throw_left'] = this.flipHorizontal(this.cache['nick_throw']);
+        }
+
+        // Per Tom, usa stessi frame con filtro colore verde (o genera proceduralmente)
+        this.generateTomFromNick();
+
+        Debug.log('Player sprites caricati da sprite sheet');
+    },
+
+    /**
+     * Genera Tom partendo dagli sprite di Nick con filtro colore
+     */
+    generateTomFromNick() {
+        const nickFrames = ['idle', 'walk1', 'walk2', 'jump', 'throw'];
+
+        for (const frame of nickFrames) {
+            const nickSprite = this.cache[`nick_${frame}`];
+            if (nickSprite) {
+                // Crea canvas per Tom
+                const canvas = document.createElement('canvas');
+                canvas.width = nickSprite.width;
+                canvas.height = nickSprite.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(nickSprite, 0, 0);
+
+                // Applica filtro colore: blu -> verde
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+
+                    // Se è blu (b > r e b > g), converti in verde
+                    if (b > r + 20 && b > g) {
+                        data[i] = Math.floor(r * 0.5);      // R ridotto
+                        data[i + 1] = Math.floor(b * 0.9);  // G prende valore di B
+                        data[i + 2] = Math.floor(g * 0.5);  // B ridotto
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+                this.cache[`tom_${frame}`] = canvas;
+                this.cache[`tom_${frame}_left`] = this.flipHorizontal(canvas);
+            }
+        }
+    },
+
+    /**
+     * Fallback: genera sprite proceduralmente
+     */
+    generatePlayersProcedural() {
         // Palette Nick (blu)
         const nickPalette = {
-            1: '#4a9fff', // blu chiaro (corpo)
-            2: '#2a6fcf', // blu scuro (ombra)
-            3: '#ffffff', // bianco (occhi, bottoni)
-            4: '#000000', // nero (pupille)
-            5: '#ff9f4a', // arancione (naso carota)
-            6: '#7fcfff'  // celeste (highlight)
+            1: '#3050a0',
+            2: '#5080d0',
+            3: '#70a0e8',
+            4: '#ffffff',
+            5: '#000000',
+            6: '#e06030',
+            7: '#f0a070'
         };
 
         // Palette Tom (verde)
         const tomPalette = {
-            1: '#4aff4a', // verde chiaro
-            2: '#2acf2a', // verde scuro
-            3: '#ffffff',
-            4: '#000000',
-            5: '#ff9f4a',
-            6: '#7fff7f'
+            1: '#207830',
+            2: '#40a050',
+            3: '#60c870',
+            4: '#ffffff',
+            5: '#000000',
+            6: '#e06030',
+            7: '#f0a070'
         };
 
         // Frame idle (16x16)
         const playerIdle = [
-            [0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0],
-            [0,0,0,0,1,1,6,1,1,6,1,1,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0],
-            [0,0,0,1,3,3,1,1,1,3,3,1,1,0,0,0],
-            [0,0,0,1,3,4,3,1,3,4,3,1,1,0,0,0],
-            [0,0,0,1,1,1,1,5,1,1,1,1,1,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,0,1,2,2,2,1,0,0,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,1,1,1,3,1,1,1,3,1,1,1,0,0,0],
-            [0,0,1,2,1,1,1,1,1,1,1,2,1,0,0,0],
-            [0,0,1,2,1,3,1,1,1,3,1,2,1,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,1,2,2,1,2,2,1,0,0,0,0,0],
-            [0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,0],
-            [0,0,0,2,2,0,0,0,0,0,2,2,0,0,0,0]
+            [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
+            [0,0,0,1,2,3,2,2,2,3,2,1,0,0,0,0],
+            [0,0,0,1,2,2,2,2,2,2,2,1,0,0,0,0],
+            [0,0,1,2,4,4,2,2,2,4,4,2,1,0,0,0],
+            [0,0,1,2,4,5,4,2,4,5,4,2,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,1,2,2,6,6,6,6,6,2,2,1,0,0,0],
+            [0,0,0,1,2,2,6,6,6,2,2,1,0,0,0,0],
+            [0,0,0,1,2,2,2,2,2,2,2,1,0,0,0,0],
+            [0,0,1,1,2,2,2,2,2,2,2,1,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,0,1,1,2,2,2,2,2,1,1,0,0,0,0],
+            [0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0],
+            [0,0,0,0,1,2,1,0,1,2,1,0,0,0,0,0],
+            [0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0]
         ];
 
-        // Frame walk 1
         const playerWalk1 = [
-            [0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0],
-            [0,0,0,0,1,1,6,1,1,6,1,1,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0],
-            [0,0,0,1,3,3,1,1,1,3,3,1,1,0,0,0],
-            [0,0,0,1,3,4,3,1,3,4,3,1,1,0,0,0],
-            [0,0,0,1,1,1,1,5,1,1,1,1,1,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,0,1,2,2,2,1,0,0,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,1,1,1,3,1,1,1,3,1,1,1,0,0,0],
-            [0,0,1,2,1,1,1,1,1,1,1,2,1,0,0,0],
-            [0,0,1,2,1,3,1,1,1,3,1,2,1,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,2,2,1,1,1,1,1,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0]
+            [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
+            [0,0,0,1,2,3,2,2,2,3,2,1,0,0,0,0],
+            [0,0,0,1,2,2,2,2,2,2,2,1,0,0,0,0],
+            [0,0,1,2,4,4,2,2,2,4,4,2,1,0,0,0],
+            [0,0,1,2,4,5,4,2,4,5,4,2,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,1,2,2,6,6,6,6,6,2,2,1,0,0,0],
+            [0,0,0,1,2,2,6,6,6,2,2,1,0,0,0,0],
+            [0,0,0,1,2,2,2,2,2,2,2,1,0,0,0,0],
+            [0,0,1,1,2,2,2,2,2,2,2,1,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,0,1,1,2,2,2,2,2,1,1,0,0,0,0],
+            [0,0,0,0,0,1,1,0,1,2,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,1,2,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0]
         ];
 
-        // Frame walk 2
         const playerWalk2 = [
-            [0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0],
-            [0,0,0,0,1,1,6,1,1,6,1,1,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0],
-            [0,0,0,1,3,3,1,1,1,3,3,1,1,0,0,0],
-            [0,0,0,1,3,4,3,1,3,4,3,1,1,0,0,0],
-            [0,0,0,1,1,1,1,5,1,1,1,1,1,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,0,1,2,2,2,1,0,0,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,1,1,1,3,1,1,1,3,1,1,1,0,0,0],
-            [0,0,1,2,1,1,1,1,1,1,1,2,1,0,0,0],
-            [0,0,1,2,1,3,1,1,1,3,1,2,1,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,1,1,1,1,2,2,0,0,0,0,0,0],
-            [0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,2,2,0,0,0,0,0,0,0,0,0,0]
+            [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
+            [0,0,0,1,2,3,2,2,2,3,2,1,0,0,0,0],
+            [0,0,0,1,2,2,2,2,2,2,2,1,0,0,0,0],
+            [0,0,1,2,4,4,2,2,2,4,4,2,1,0,0,0],
+            [0,0,1,2,4,5,4,2,4,5,4,2,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,1,2,2,6,6,6,6,6,2,2,1,0,0,0],
+            [0,0,0,1,2,2,6,6,6,2,2,1,0,0,0,0],
+            [0,0,0,1,2,2,2,2,2,2,2,1,0,0,0,0],
+            [0,0,1,1,2,2,2,2,2,2,2,1,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,0,1,1,2,2,2,2,2,1,1,0,0,0,0],
+            [0,0,0,0,1,2,1,0,1,1,0,0,0,0,0,0],
+            [0,0,0,0,1,2,1,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0]
         ];
 
-        // Frame jump
         const playerJump = [
-            [0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0],
-            [0,0,0,0,1,1,6,1,1,6,1,1,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0],
-            [0,0,0,1,3,3,1,1,1,3,3,1,1,0,0,0],
-            [0,0,0,1,3,4,3,1,3,4,3,1,1,0,0,0],
-            [0,0,0,1,1,1,1,5,1,1,1,1,1,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,0,1,2,2,2,1,0,0,0,0,0,0],
-            [0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
-            [0,1,1,1,1,3,1,1,1,3,1,1,1,1,0,0],
-            [0,1,2,1,1,1,1,1,1,1,1,1,2,1,0,0],
-            [0,0,1,1,1,3,1,1,1,3,1,1,1,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0],
-            [0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0],
-            [0,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0],
-            [0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0]
+            [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
+            [0,0,0,1,2,3,2,2,2,3,2,1,0,0,0,0],
+            [0,0,0,1,2,2,2,2,2,2,2,1,0,0,0,0],
+            [0,0,1,2,4,4,2,2,2,4,4,2,1,0,0,0],
+            [0,0,1,2,4,5,4,2,4,5,4,2,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,1,2,2,6,6,6,6,6,2,2,1,0,0,0],
+            [0,0,0,1,2,2,6,6,6,2,2,1,0,0,0,0],
+            [0,1,1,1,2,2,2,2,2,2,2,1,1,1,0,0],
+            [1,2,2,1,2,2,2,2,2,2,2,1,2,2,1,0],
+            [0,1,1,2,2,2,2,2,2,2,2,2,1,1,0,0],
+            [0,0,0,1,1,2,2,2,2,2,1,1,0,0,0,0],
+            [0,0,0,1,2,1,0,0,0,1,2,1,0,0,0,0],
+            [0,0,1,2,1,0,0,0,0,0,1,2,1,0,0,0],
+            [0,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0]
         ];
 
-        // Frame throw
         const playerThrow = [
-            [0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0],
-            [0,0,0,0,1,1,6,1,1,6,1,1,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0],
-            [0,0,0,1,3,3,1,1,1,3,3,1,1,0,0,0],
-            [0,0,0,1,3,4,3,1,3,4,3,1,1,0,0,0],
-            [0,0,0,1,1,1,1,5,1,1,1,1,1,0,0,0],
-            [0,0,0,0,1,1,3,3,3,1,1,1,0,0,0,0],
-            [0,0,0,0,0,1,2,2,2,1,0,0,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0],
-            [0,0,1,1,1,3,1,1,1,3,1,1,1,1,1,0],
-            [0,0,1,2,1,1,1,1,1,1,1,2,1,0,0,0],
-            [0,0,1,2,1,3,1,1,1,3,1,2,1,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,1,2,2,1,2,2,1,0,0,0,0,0],
-            [0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,0],
-            [0,0,0,2,2,0,0,0,0,0,2,2,0,0,0,0]
+            [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,1,2,2,2,2,2,1,0,0,0,0,0],
+            [0,0,0,1,2,3,2,2,2,3,2,1,0,0,0,0],
+            [0,0,0,1,2,2,2,2,2,2,2,1,0,0,0,0],
+            [0,0,1,2,4,4,2,2,2,4,4,2,1,0,0,0],
+            [0,0,1,2,4,5,4,2,4,5,4,2,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,1,2,2,6,6,6,6,6,2,2,1,1,1,1],
+            [0,0,0,1,2,2,6,6,6,2,2,1,2,2,2,1],
+            [0,0,0,1,2,2,2,2,2,2,2,1,1,1,1,0],
+            [0,0,1,1,2,2,2,2,2,2,2,1,1,0,0,0],
+            [0,0,1,2,2,2,2,2,2,2,2,2,1,0,0,0],
+            [0,0,0,1,1,2,2,2,2,2,1,1,0,0,0,0],
+            [0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0],
+            [0,0,0,0,1,2,1,0,1,2,1,0,0,0,0,0],
+            [0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0]
         ];
 
         // Genera sprite Nick
@@ -347,37 +688,53 @@ const Sprites = {
     // ===========================================
 
     generateSnow() {
-        // Proiettile neve piccolo (8x8)
+        // Proiettile neve (8x8) - stile originale arcade con dettagli
         const snowProjectile = [
             [0,0,1,1,1,1,0,0],
-            [0,1,1,1,1,1,1,0],
-            [1,1,1,1,1,1,1,1],
-            [1,1,1,1,1,1,1,1],
-            [1,1,1,1,1,1,1,1],
-            [1,1,1,1,1,1,1,1],
-            [0,1,1,1,1,1,1,0],
+            [0,1,2,2,2,2,1,0],
+            [1,2,2,1,1,2,2,1],
+            [1,2,1,1,1,1,2,1],
+            [1,2,1,1,1,1,2,1],
+            [1,2,2,1,1,2,2,1],
+            [0,1,2,2,2,2,1,0],
             [0,0,1,1,1,1,0,0]
         ];
 
-        // Palla di neve rotolante (12x12)
+        // Proiettile neve frame 2 (animazione)
+        const snowProjectile2 = [
+            [0,0,0,1,1,0,0,0],
+            [0,0,1,2,2,1,0,0],
+            [0,1,2,1,1,2,1,0],
+            [1,2,1,1,1,1,2,1],
+            [1,2,1,1,1,1,2,1],
+            [0,1,2,1,1,2,1,0],
+            [0,0,1,2,2,1,0,0],
+            [0,0,0,1,1,0,0,0]
+        ];
+
+        // Palla di neve rotolante (12x12) - con ombreggiatura
         const rollingSnowball = [
             [0,0,0,1,1,1,1,1,1,0,0,0],
-            [0,0,1,1,1,1,1,1,1,1,0,0],
-            [0,1,1,1,1,1,1,1,1,1,1,0],
-            [1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1],
-            [0,1,1,1,1,1,1,1,1,1,1,0],
-            [0,0,1,1,1,1,1,1,1,1,0,0],
+            [0,0,1,2,2,2,2,2,2,1,0,0],
+            [0,1,2,2,1,1,1,1,2,2,1,0],
+            [1,2,2,1,1,1,1,1,1,2,2,1],
+            [1,2,1,1,1,1,1,1,1,1,2,1],
+            [1,2,1,1,1,1,1,1,1,1,2,1],
+            [1,2,1,1,1,1,1,1,1,1,2,1],
+            [1,2,1,1,1,1,1,1,1,1,2,1],
+            [1,2,2,1,1,1,1,1,1,2,2,1],
+            [0,1,2,2,1,1,1,1,2,2,1,0],
+            [0,0,1,2,2,2,2,2,2,1,0,0],
             [0,0,0,1,1,1,1,1,1,0,0,0]
         ];
 
-        const snowPalette = { 1: '#ffffff' };
+        const snowPalette = {
+            1: '#ffffff',  // bianco
+            2: '#c8e0f8'   // celeste chiaro (ombra)
+        };
 
         this.cache['snow_projectile'] = this.createSprite(8, 8, snowProjectile, snowPalette);
+        this.cache['snow_projectile2'] = this.createSprite(8, 8, snowProjectile2, snowPalette);
         this.cache['snow_rolling'] = this.createSprite(12, 12, rollingSnowball, snowPalette);
     },
 
@@ -701,17 +1058,17 @@ const Sprites = {
         ];
 
         const nickPalette = {
-            1: '#4a9fff', // blu
+            1: '#5080d0', // blu (fedele all'originale)
             3: '#ffffff', // bianco occhi
             4: '#000000', // pupille
-            5: '#ff9f4a'  // naso arancione
+            5: '#e06030'  // naso arancione
         };
 
         const tomPalette = {
-            1: '#4aff4a', // verde
+            1: '#40a050', // verde (fedele all'originale)
             3: '#ffffff',
             4: '#000000',
-            5: '#ff9f4a'
+            5: '#e06030'
         };
 
         this.cache['life_nick'] = this.createSprite(7, 7, lifeIconNick, nickPalette);
